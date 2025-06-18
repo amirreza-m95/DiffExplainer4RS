@@ -3,6 +3,8 @@ datasets/
 *.log
 diffCEvenv/
 checkpoints/
+results/
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
