@@ -19,6 +19,7 @@ import sys
 from datetime import datetime
 import os
 from io import StringIO
+import argparse
 
 # Configure logging
 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -563,35 +564,76 @@ class ML1MAnalyzer(DatasetAnalyzer):
             self.logger.error(f"Error loading ML1M raw data: {e}")
             return pd.DataFrame()
 
+class M4AOnionAnalyzer(DatasetAnalyzer):
+    """Specific analyzer for m4a-onion dataset (implicit feedback)"""
+    def __init__(self, interaction_file="userid_trackid_timestamp.tsv"):
+        super().__init__("m4a-onion")
+        self.interaction_file = interaction_file
+
+    def load_raw_data(self) -> pd.DataFrame:
+        """Load m4a-onion user-track interaction data (implicit feedback)"""
+        try:
+            # Assume tab-separated, columns: userid, trackid, timestamp
+            self.raw_data = pd.read_csv(
+                self.data_dir / self.interaction_file,
+                sep="\t",
+                names=["userid", "trackid", "timestamp"],
+                header=0 if self._has_header() else None
+            )
+            self.logger.info(f"Loaded m4a-onion raw data from {self.interaction_file}")
+            return self.raw_data
+        except Exception as e:
+            self.logger.error(f"Error loading m4a-onion raw data: {e}")
+            return pd.DataFrame()
+
+    def _has_header(self):
+        # Try to detect if the first line is a header
+        try:
+            with open(self.data_dir / self.interaction_file, 'r') as f:
+                first_line = f.readline().strip().split('\t')
+                return set(first_line) >= {"userid", "trackid", "timestamp"}
+        except Exception:
+            return False
+
 def main():
     """Main function to run the analysis"""
-    # Initialize ML1M analyzer
-    ml1m = ML1MAnalyzer()
-    
-    print("=== Starting ML1M Dataset Analysis ===\n")
-    
+    # Choose which dataset to analyze
+    parser = argparse.ArgumentParser(description="EDA for DiffExplainer4RS datasets")
+    parser.add_argument('--dataset', type=str, default='ML1M', choices=['ML1M', 'm4a-onion'],
+                        help='Dataset to analyze (ML1M or m4a-onion)')
+    parser.add_argument('--m4a-file', type=str, default='userid_trackid_timestamp.tsv',
+                        help='Interaction file for m4a-onion (default: userid_trackid_timestamp.tsv)')
+    args = parser.parse_args()
+
+    if args.dataset == 'ML1M':
+        analyzer = ML1MAnalyzer()
+        print("=== Starting ML1M Dataset Analysis ===\n")
+    else:
+        analyzer = M4AOnionAnalyzer(interaction_file=args.m4a_file)
+        print(f"=== Starting m4a-onion Dataset Analysis ({args.m4a_file}) ===\n")
+
     # Load and analyze raw data
-    raw_data = ml1m.load_raw_data()
-    if raw_data is not None:
+    raw_data = analyzer.load_raw_data()
+    if raw_data is not None and not raw_data.empty:
         print("\n=== Raw Data Analysis ===")
-        
-        # Analyze ratings
-        rating_stats = ml1m.analyze_rating_distribution(raw_data, "Raw Data")
-        print("\nRating Statistics:")
-        print(f"Mean rating: {rating_stats['mean']:.2f}")
-        print(f"Median rating: {rating_stats['median']:.2f}")
-        print(f"Standard deviation: {rating_stats['std']:.2f}")
-        print(f"Rating range: {rating_stats['min']} - {rating_stats['max']}")
-        
+        if args.dataset == 'ML1M':
+            # Analyze ratings
+            rating_stats = analyzer.analyze_rating_distribution(raw_data, "Raw Data")
+            print("\nRating Statistics:")
+            print(f"Mean rating: {rating_stats['mean']:.2f}")
+            print(f"Median rating: {rating_stats['median']:.2f}")
+            print(f"Standard deviation: {rating_stats['std']:.2f}")
+            print(f"Rating range: {rating_stats['min']} - {rating_stats['max']}")
         # Analyze user activity
-        user_stats = ml1m.analyze_user_activity(raw_data, "Raw Data")
+        user_stats = analyzer.analyze_user_activity(
+            raw_data, "Raw Data", user_col='user_id' if args.dataset == 'ML1M' else 'userid')
         print("\nUser Activity Statistics:")
         print(f"Total unique users: {user_stats['unique_users']}")
         print(f"Average ratings per user: {user_stats['avg_ratings_per_user']:.2f}")
         print(f"Median ratings per user: {user_stats['ratings_per_user']['50%']:.2f}")
-        
         # Analyze item popularity
-        item_stats = ml1m.analyze_item_popularity(raw_data, "Raw Data")
+        item_stats = analyzer.analyze_item_popularity(
+            raw_data, "Raw Data", item_col='item_id' if args.dataset == 'ML1M' else 'trackid')
         print("\nItem Popularity Statistics:")
         print(f"Total unique items: {item_stats['unique_items']}")
         print(f"Average ratings per item: {item_stats['avg_ratings_per_item']:.2f}")
@@ -599,21 +641,21 @@ def main():
         print("\nPopularity Concentration:")
         for metric, value in item_stats['popularity_concentration'].items():
             print(f"{metric}: {value*100:.2f}%")
-    
+
     # Load and analyze preprocessed data
-    preprocessed = ml1m.load_preprocessed_data()
+    preprocessed = analyzer.load_preprocessed_data()
     if preprocessed:
         print("\n=== Preprocessed Data Analysis ===")
         for data_type, data in preprocessed.items():
             print(f"\nAnalyzing {data_type.upper()} data...")
-            ml1m.analyze_preprocessed_data(data, data_type.upper())
-    
+            analyzer.analyze_preprocessed_data(data, data_type.upper())
+
     # Load and analyze auxiliary data
     print("\n=== Auxiliary Data Analysis ===")
-    ml1m.analyze_auxiliary_data()
-    
+    analyzer.analyze_auxiliary_data()
+
     print("\n=== Analysis Complete ===")
-    print(f"Results have been saved to: {ml1m.results_dir}")
+    print(f"Results have been saved to: {analyzer.results_dir}")
     print("\nResults directory structure:")
     print("  - plots/: All visualizations")
     print("    - ratings/: Rating distribution plots")
