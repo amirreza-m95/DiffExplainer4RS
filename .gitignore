@@ -5,6 +5,8 @@ diffCEvenv/
 checkpoints/
 results/
 wandb/
+zSlurmOutput/
+zTrash/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
