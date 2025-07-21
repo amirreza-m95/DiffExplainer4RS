@@ -25,8 +25,8 @@ import sys
 import os,argparse
 parser = argparse.ArgumentParser(description="List files in a directory that start with a given keyword.")
 
-parser.add_argument('--directoryRec', type=str, default="VAE_ML1M_0.0007_128_10.pt", nargs='?')
-parser.add_argument('--directoryLXR', type=str, default="LXR_ML1M_VAE_26_38_128_3.185652725834087_1.420642300151426.pt", nargs='?')
+parser.add_argument('--directoryRec', type=str, default="VAE_ML1M_0_19_128.pt", nargs='?')
+parser.add_argument('--directoryLXR', type=str, default="LXR_ML1M_VAE_0_12_128_35_7.pt", nargs='?')
 parser.add_argument('--SizeLXR', type=int, default=128, nargs='?')
 
 # Parse the arguments
@@ -466,6 +466,35 @@ def single_user_metrics(user_vector, user_tensor, item_id, item_tensor, num_of_b
         NEG_at_50[i] = 1 if NEG_index <=50 else 0
         NEG_at_100[i] = 1 if NEG_index <=100 else 0
 
+        if i > 0:
+            # For POS metrics: if previous value was 0, current should also be 0
+            if POS_at_1[i-1] == 0:
+                POS_at_1[i] = 0
+            if POS_at_5[i-1] == 0:
+                POS_at_5[i] = 0
+            if POS_at_10[i-1] == 0:
+                POS_at_10[i] = 0
+            if POS_at_20[i-1] == 0:
+                POS_at_20[i] = 0
+            if POS_at_50[i-1] == 0:
+                POS_at_50[i] = 0
+            if POS_at_100[i-1] == 0:
+                POS_at_100[i] = 0
+            
+            # For NEG metrics: if previous value was 0, current should also be 0
+            if NEG_at_1[i-1] == 0:
+                NEG_at_1[i] = 0
+            if NEG_at_5[i-1] == 0:
+                NEG_at_5[i] = 0
+            if NEG_at_10[i-1] == 0:
+                NEG_at_10[i] = 0
+            if NEG_at_20[i-1] == 0:
+                NEG_at_20[i] = 0
+            if NEG_at_50[i-1] == 0:
+                NEG_at_50[i] = 0
+            if NEG_at_100[i-1] == 0:
+                NEG_at_100[i] = 0
+
         # for del:
         DEL[i] = float(recommender_run(POS_masked, recommender_model, item_tensor, item_id, **kw_dict).detach().cpu().numpy())
 
@@ -481,7 +510,7 @@ def single_user_metrics(user_vector, user_tensor, item_id, item_tensor, num_of_b
         
     return res
 
-create_dictionaries = True # if it is the first time generating the explanations
+create_dictionaries = False # if it is the first time generating the explanations
 
 if create_dictionaries:
     import time

@@ -18,23 +18,15 @@ from src.LXR.recommenders_architecture import VAE
 from src.LXR.help_functions import get_user_recommended_item, get_top_k, get_index_in_the_list, get_ndcg, recommender_run
 
 # ========== CONFIGURATION ==========
-parser = argparse.ArgumentParser(description="Evaluate diffusion model for counterfactual explanations")
-parser.add_argument('--checkpoint', type=str, default="best_denoiser_ML1M_bs128_lr0.01_lcf0.9_l10.5_pres0.3.pt", nargs='?')
+parser = argparse.ArgumentParser(description="Evaluate attention-based diffusion model for counterfactual explanations")
+parser.add_argument('--checkpoint', type=str, default="best_attention_denoiser_ML1M_bs128_lr0.005_lcf5.0_l10.9_pres0.8.pt", nargs='?')
 parser.add_argument('--data_name', type=str, default="ML1M", nargs='?')
 parser.add_argument('--recommender_name', type=str, default="VAE", nargs='?')
 parser.add_argument('--batch_size', type=int, default=128, nargs='?')
-parser.add_argument('--learning_rate', type=float, default=0.001, nargs='?')
-parser.add_argument('--lambda_cf', type=float, default=0.5, nargs='?')
-parser.add_argument('--lambda_l1', type=float, default=1.0, nargs='?')
-parser.add_argument('--lambda_preserve', type=float, default=1.0, nargs='?')
-
-# Model architecture arguments
-parser.add_argument('--hidden_dim', type=int, default=1024, nargs='?')
-parser.add_argument('--dropout_rate', type=float, default=0.0579318641325684, nargs='?')
-parser.add_argument('--num_layers', type=int, default=4, nargs='?')
-parser.add_argument('--layer_ratio', type=float, default=0.5, nargs='?')
-parser.add_argument('--activation', type=str, default="LeakyReLU", nargs='?')
-parser.add_argument('--use_skip_connection', action='store_true', default=True)
+parser.add_argument('--learning_rate', type=float, default=0.005, nargs='?')
+parser.add_argument('--lambda_cf', type=float, default=5.0, nargs='?')
+parser.add_argument('--lambda_l1', type=float, default=0.9, nargs='?')
+parser.add_argument('--lambda_preserve', type=float, default=0.8, nargs='?')
 
 args = parser.parse_args()
 
@@ -85,148 +77,57 @@ def load_data():
     
     return train_array, test_array, static_test_array, test_data
 
-# ========== DENOISING MODEL ==========
-class Swish(nn.Module):
-    def forward(self, x):
-        return x * torch.sigmoid(x)
-
-class AdvancedDenoisingMLP(nn.Module):
-    def __init__(self, input_dim, hidden_dim=512, dropout_rate=0.1, num_layers=3, 
-                 layer_ratio=0.5, activation="ReLU", use_skip_connection=True):
+# ========== ATTENTION-BASED DENOISING MODEL ==========
+class AttentionDenoisingMLP(nn.Module):
+    def __init__(self, input_dim):
         super().__init__()
+        self.input_dim = input_dim
         
-        # Activation function selection
-        if activation == "ReLU":
-            self.activation = nn.ReLU()
-        elif activation == "LeakyReLU":
-            self.activation = nn.LeakyReLU(0.1)
-        elif activation == "GELU":
-            self.activation = nn.GELU()
-        elif activation == "Swish":
-            self.activation = Swish()
-        else:
-            self.activation = nn.ReLU()
+        # Attention mechanism to focus on important interactions
+        self.attention = nn.Sequential(
+            nn.Linear(input_dim, 256),
+            nn.ReLU(),
+            nn.Linear(256, input_dim),
+            nn.Sigmoid()
+        )
         
-        # Build layers dynamically
-        layers = []
-        current_dim = input_dim
-        
-        for i in range(num_layers):
-            if i == 0:
-                next_dim = hidden_dim
-            elif i == num_layers - 1:
-                next_dim = input_dim
-            else:
-                next_dim = int(hidden_dim * (layer_ratio ** i))
-            
-            layers.extend([
-                nn.Linear(current_dim, next_dim),
-                self.activation,
-                nn.Dropout(dropout_rate)
-            ])
-            current_dim = next_dim
-        
-        self.layers = nn.Sequential(*layers[:-1])  # Remove last dropout
+        # Main denoising network
+        self.layers = nn.Sequential(
+            nn.Linear(input_dim, 512),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(512, 256),
+            nn.ReLU(),
+            nn.Dropout(0.1),
+            nn.Linear(256, input_dim)
+        )
         
         # Skip connection
-        self.use_skip_connection = use_skip_connection
-        if use_skip_connection:
-            self.skip = nn.Linear(input_dim, input_dim)
+        self.skip = nn.Linear(input_dim, input_dim)
         
     def forward(self, x):
-        main_out = self.layers(x)
+        # Compute attention weights
+        attention_weights = self.attention(x)
         
-        if self.use_skip_connection:
-            skip_out = self.skip(x)
-            return torch.sigmoid(main_out + skip_out)
-        else:
-            return torch.sigmoid(main_out)
+        # Apply attention to input
+        attended_input = x * attention_weights
+        
+        # Main path
+        main_out = self.layers(attended_input)
+        
+        # Skip connection
+        skip_out = self.skip(x)
+        
+        # Combine and apply sigmoid
+        output = torch.sigmoid(main_out + skip_out)
+        
+        return output, attention_weights
 
-def detect_model_architecture(checkpoint_path):
-    """
-    Try to detect the model architecture from the checkpoint file.
-    Returns a dictionary with the detected parameters.
-    """
-    print(f"Attempting to detect model architecture from {checkpoint_path}")
+def load_attention_diffusion_model(checkpoint_path):
+    """Load the trained attention-based diffusion model"""
+    print(f"Loading attention-based diffusion model from {checkpoint_path}")
     
-    # Load the checkpoint state dict
-    state_dict = torch.load(checkpoint_path, map_location='cpu')
-    
-    # Analyze the state dict to determine architecture
-    layer_keys = [key for key in state_dict.keys() if 'layers.' in key and '.weight' in key]
-    
-    if not layer_keys:
-        print("Warning: Could not detect layer structure from checkpoint")
-        return None
-    
-    # Sort layer keys to get them in order
-    layer_keys.sort()
-    
-    # Extract dimensions from all layers
-    layer_dims = []
-    for key in layer_keys:
-        weight_shape = state_dict[key].shape
-        layer_dims.append(weight_shape)
-    
-    # First layer gives us input_dim and hidden_dim
-    input_dim = layer_dims[0][1]  # Input dimension
-    hidden_dim = layer_dims[0][0]  # Hidden dimension
-    
-    # Count the number of layers (divide by 2 because each layer has weight and bias)
-    num_layers = len(layer_dims)
-    
-    # Calculate layer_ratio by analyzing the dimension progression
-    if num_layers >= 3:
-        # The middle layers should follow the layer_ratio pattern
-        # For a 4-layer network: input_dim -> hidden_dim -> hidden_dim*ratio -> input_dim
-        middle_layer_dim = layer_dims[1][0]  # Output dimension of second layer
-        layer_ratio = middle_layer_dim / hidden_dim
-    else:
-        layer_ratio = 0.5  # Default fallback
-    
-    # Check if skip connection exists
-    has_skip = any('skip' in key for key in state_dict.keys())
-    
-    print(f"Detected architecture: input_dim={input_dim}, hidden_dim={hidden_dim}, num_layers={num_layers}, layer_ratio={layer_ratio:.3f}, has_skip={has_skip}")
-    print(f"Layer dimensions: {[f'{d[0]}x{d[1]}' for d in layer_dims]}")
-    
-    return {
-        'input_dim': input_dim,
-        'hidden_dim': hidden_dim,
-        'num_layers': num_layers,
-        'layer_ratio': layer_ratio,
-        'has_skip': has_skip
-    }
-
-def load_diffusion_model(checkpoint_path):
-    """Load the trained diffusion model with the same architecture as training"""
-    # Try to detect architecture from checkpoint
-    detected_arch = detect_model_architecture(checkpoint_path)
-    
-    if detected_arch:
-        # Use detected parameters
-        model = AdvancedDenoisingMLP(
-            input_dim=detected_arch['input_dim'],
-            hidden_dim=detected_arch['hidden_dim'],
-            dropout_rate=args.dropout_rate,  # Keep from args as it's not in state dict
-            num_layers=detected_arch['num_layers'],
-            layer_ratio=detected_arch['layer_ratio'],  # Keep from detected architecture
-            activation=args.activation,  # Keep from args as it's not in state dict
-            use_skip_connection=detected_arch['has_skip']
-        ).to(DEVICE)
-    else:
-        # Fallback to command line arguments
-        print("Using command line arguments for model architecture")
-        model = AdvancedDenoisingMLP(
-            input_dim=USER_HISTORY_DIM,
-            hidden_dim=args.hidden_dim,
-            dropout_rate=args.dropout_rate,
-            num_layers=args.num_layers,
-            layer_ratio=args.layer_ratio,
-            activation=args.activation,
-            use_skip_connection=args.use_skip_connection
-        ).to(DEVICE)
-    
+    model = AttentionDenoisingMLP(USER_HISTORY_DIM).to(DEVICE)
     model.load_state_dict(torch.load(checkpoint_path, map_location=DEVICE))
     model.eval()
     return model
@@ -259,14 +160,22 @@ def load_vae_recommender(checkpoint_path, device=DEVICE):
 # ========== DIFFUSION EXPLANATION FUNCTION ==========
 def find_diffusion_mask(user_tensor, item_tensor, item_id, diffusion_model, recommender, **kw_dict):
     """
-    Generate counterfactual explanations using the diffusion model, following the same logic as find_lxr_mask.
+    Generate counterfactual explanations using the attention-based diffusion model.
     Returns a dictionary mapping item indices to their explanation scores.
     """
     diffusion_model.eval()
     with torch.no_grad():
         # Get explanation scores from the diffusion model
-        expl_scores = diffusion_model(user_tensor)
-        x_masked = user_tensor * expl_scores
+        expl_scores, attention_weights = diffusion_model(user_tensor.unsqueeze(0))
+        expl_scores = expl_scores.squeeze(0)  # Remove batch dimension
+        
+        # Use attention weights as explanation scores
+        attention_scores = attention_weights.squeeze(0)
+        
+        # Combine both scores for better explanations
+        combined_scores = expl_scores * attention_scores
+        
+        x_masked = user_tensor * combined_scores
         item_sim_dict = {}
         for i, j in enumerate(x_masked > 0):
             if j:
@@ -276,7 +185,7 @@ def find_diffusion_mask(user_tensor, item_tensor, item_id, diffusion_model, reco
 # ========== EVALUATION FUNCTIONS ==========
 def single_user_expl_diffusion(user_vector, user_tensor, item_id, item_tensor, recommender, diffusion_model, **kw_dict):
     """
-    Generate explanations for a single user using diffusion model.
+    Generate explanations for a single user using attention-based diffusion model.
     Returns a dictionary of explanations, sorted by their scores.
     """
     user_hist_size = int(np.sum(user_vector))
@@ -291,7 +200,7 @@ def single_user_expl_diffusion(user_vector, user_tensor, item_id, item_tensor, r
 
 def single_user_metrics_diffusion(user_vector, user_tensor, item_id, item_tensor, num_of_bins, recommender_model, expl_dict, **kw_dict):
     """
-    Calculate metrics for a single user based on diffusion explanations.
+    Calculate metrics for a single user based on attention-based diffusion explanations.
     Follows the same structure as the original single_user_metrics function.
     """
     POS_masked = user_tensor
@@ -365,35 +274,35 @@ def single_user_metrics_diffusion(user_vector, user_tensor, item_id, item_tensor
         NEG_at_50[i] = 1 if NEG_index <= 50 else 0
         NEG_at_100[i] = 1 if NEG_index <= 100 else 0
         
-        # # Enforce monotonicity: once a metric becomes 0, it should remain 0
-        # if i > 0:
-        #     # For POS metrics: if previous value was 0, current should also be 0
-        #     if POS_at_1[i-1] == 0:
-        #         POS_at_1[i] = 0
-        #     if POS_at_5[i-1] == 0:
-        #         POS_at_5[i] = 0
-        #     if POS_at_10[i-1] == 0:
-        #         POS_at_10[i] = 0
-        #     if POS_at_20[i-1] == 0:
-        #         POS_at_20[i] = 0
-        #     if POS_at_50[i-1] == 0:
-        #         POS_at_50[i] = 0
-        #     if POS_at_100[i-1] == 0:
-        #         POS_at_100[i] = 0
+        # Enforce monotonicity: once a metric becomes 0, it should remain 0
+        if i > 0:
+            # For POS metrics: if previous value was 0, current should also be 0
+            if POS_at_1[i-1] == 0:
+                POS_at_1[i] = 0
+            if POS_at_5[i-1] == 0:
+                POS_at_5[i] = 0
+            if POS_at_10[i-1] == 0:
+                POS_at_10[i] = 0
+            if POS_at_20[i-1] == 0:
+                POS_at_20[i] = 0
+            if POS_at_50[i-1] == 0:
+                POS_at_50[i] = 0
+            if POS_at_100[i-1] == 0:
+                POS_at_100[i] = 0
             
-        #     # For NEG metrics: if previous value was 0, current should also be 0
-        #     if NEG_at_1[i-1] == 0:
-        #         NEG_at_1[i] = 0
-        #     if NEG_at_5[i-1] == 0:
-        #         NEG_at_5[i] = 0
-        #     if NEG_at_10[i-1] == 0:
-        #         NEG_at_10[i] = 0
-        #     if NEG_at_20[i-1] == 0:
-        #         NEG_at_20[i] = 0
-        #     if NEG_at_50[i-1] == 0:
-        #         NEG_at_50[i] = 0
-        #     if NEG_at_100[i-1] == 0:
-        #         NEG_at_100[i] = 0
+            # For NEG metrics: if previous value was 0, current should also be 0
+            if NEG_at_1[i-1] == 0:
+                NEG_at_1[i] = 0
+            if NEG_at_5[i-1] == 0:
+                NEG_at_5[i] = 0
+            if NEG_at_10[i-1] == 0:
+                NEG_at_10[i] = 0
+            if NEG_at_20[i-1] == 0:
+                NEG_at_20[i] = 0
+            if NEG_at_50[i-1] == 0:
+                NEG_at_50[i] = 0
+            if NEG_at_100[i-1] == 0:
+                NEG_at_100[i] = 0
         
         DEL[i] = float(recommender_run(POS_masked, recommender_model, item_tensor, item_id, **kw_dict).detach().cpu().numpy())
         INS[i] = float(recommender_run(user_tensor - POS_masked, recommender_model, item_tensor, item_id, **kw_dict).detach().cpu().numpy())
@@ -407,11 +316,11 @@ def single_user_metrics_diffusion(user_vector, user_tensor, item_id, item_tensor
     
     return res
 
-def eval_diffusion_model():
+def eval_attention_diffusion_model():
     """
-    Main evaluation function for the diffusion model.
+    Main evaluation function for the attention-based diffusion model.
     """
-    print(f"=== Evaluating Diffusion Model ===")
+    print(f"=== Evaluating Attention-Based Diffusion Model ===")
     print(f"Dataset: {args.data_name}")
     print(f"Recommender: {args.recommender_name}")
     print(f"Checkpoint: {args.checkpoint}")
@@ -422,9 +331,9 @@ def eval_diffusion_model():
     print(f"Loaded data - Train: {train_array.shape}, Test: {test_array.shape}, Static Test: {static_test_array.shape}")
     
     # Load models
-    diffusion_model = load_diffusion_model(DIFFUSION_CHECKPOINT_PATH)
+    diffusion_model = load_attention_diffusion_model(DIFFUSION_CHECKPOINT_PATH)
     recommender, kw_dict = load_vae_recommender(CHECKPOINT_PATH, DEVICE)
-    print(f"Loaded diffusion model and recommender")
+    print(f"Loaded attention-based diffusion model and recommender")
     
     # Prepare items array
     items_array = np.eye(USER_HISTORY_DIM)
@@ -433,7 +342,7 @@ def eval_diffusion_model():
     kw_dict['items_array'] = items_array
     
     # Initialize metric arrays
-    num_of_bins = 11
+    num_of_bins = 5
     users_DEL = np.zeros(num_of_bins + 1)
     users_INS = np.zeros(num_of_bins + 1)
     NDCG = np.zeros(num_of_bins + 1)
@@ -474,7 +383,7 @@ def eval_diffusion_model():
             user_vector[item_id] = 0
             user_tensor[item_id] = 0
             
-            # Generate explanations using diffusion model
+            # Generate explanations using attention-based diffusion model
             user_expl = single_user_expl_diffusion(user_vector, user_tensor, item_id, item_tensor, 
                                                   recommender, diffusion_model, **kw_dict)
             
@@ -501,7 +410,7 @@ def eval_diffusion_model():
     
     # Calculate averages
     num_users = static_test_array.shape[0]
-    print(f"\n=== Diffusion Model Evaluation Results ===")
+    print(f"\n=== Attention-Based Diffusion Model Evaluation Results ===")
     print(f"Number of users evaluated: {num_users}")
     print(f"Checkpoint: {args.checkpoint}")
     print(f"Dataset: {args.data_name}, Recommender: {args.recommender_name}")
@@ -541,7 +450,7 @@ def eval_diffusion_model():
         'NEG_at_100': NEG_at_100 / num_users
     }
     
-    results_path = Path(f'results/diffusion_{args.data_name}_{args.recommender_name}_results.pkl')
+    results_path = Path(f'results/attention_diffusion_{args.data_name}_{args.recommender_name}_results.pkl')
     results_path.parent.mkdir(parents=True, exist_ok=True)
     
     with open(results_path, 'wb') as f:
@@ -553,16 +462,16 @@ def eval_diffusion_model():
 
 # ========== MAIN ==========
 if __name__ == "__main__":
-    print("=== Diffusion Model Evaluation ===")
+    print("=== Attention-Based Diffusion Model Evaluation ===")
     print("Usage examples:")
-    print("  # Use default checkpoint (trial 9)")
-    print("  python src/Diffusion/eval.py")
+    print("  # Use default attention checkpoint")
+    print("  python src/Diffusion/eval_attention.py")
     print("")
-    print("  # Use a different checkpoint with auto-detection")
-    print("  python src/Diffusion/eval.py --checkpoint best_advanced_diffusion_ML1M_VAE_trial5_epoch15.pt")
+    print("  # Use a different attention checkpoint")
+    print("  python src/Diffusion/eval_attention.py --checkpoint my_attention_checkpoint.pt")
     print("")
-    print("  # Use a different checkpoint with manual architecture specification")
-    print("  python src/Diffusion/eval.py --checkpoint my_checkpoint.pt --hidden_dim 512 --num_layers 3 --activation ReLU")
+    print("  # Use different dataset")
+    print("  python src/Diffusion/eval_attention.py --data_name Yahoo --recommender_name VAE")
     print("")
     
-    results = eval_diffusion_model()
+    results = eval_attention_diffusion_model() 

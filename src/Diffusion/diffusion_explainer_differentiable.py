@@ -25,10 +25,10 @@ USER_HISTORY_DIM = 3381  # Number of items
 BATCH_SIZE = 128
 EPOCHS = 10
 LEARNING_RATE = 0.005
-LAMBDA_CF = 2.9                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 # Weight for counterfactual loss
-LAMBDA_L1 = 0.01   # Increased weight for L1 loss (encourage minimal changes)
-LAMBDA_PRESERVE = 0.5  # New weight to strongly preserve non-noised positions
-max_noise_probability = 0.90
+LAMBDA_CF = 1.0  # Reduced weight for counterfactual loss
+LAMBDA_L1 = 0.9   # Weight for L1 loss (encourage minimal changes)
+LAMBDA_PRESERVE = 0.8  # Weight to preserve non-noised positions
+max_noise_probability = 0.8
 
 # ========== DATA LOADING ==========
 def load_user_histories(data_path):
@@ -110,11 +110,11 @@ def loss_visualizer(total_losses, recon_losses, cf_losses, l1_losses, preserve_l
     plt.plot(epochs, change_rates, label='Change Rate')
     plt.xlabel('Epoch')
     plt.ylabel('Loss / Change Rate')
-    plt.title('Training Losses and Change Rate Over Epochs')
+    plt.title('Training Losses and Change Rate Over Epochs (Differentiable CF)')
     plt.legend()
     plt.grid(True)
     plt.tight_layout()
-    plt.savefig('loss_curves.png')
+    plt.savefig('loss_curves_differentiable.png')
     plt.close()
 
 def train_denoiser():
@@ -150,6 +150,7 @@ def train_denoiser():
     l1_losses = []
     preserve_losses = []
     change_rates = []
+    
     for epoch in range(EPOCHS):
         progress = epoch / (EPOCHS - 1)
         current_max_noise_prob = initial_noise_prob + (final_noise_prob - initial_noise_prob) * progress
@@ -161,6 +162,7 @@ def train_denoiser():
         total_preserve_loss = 0
         total_changed = 0
         total_count = 0
+        
         for i in range(0, num_samples, BATCH_SIZE):
             batch_idx = perm[i:i+BATCH_SIZE]
             x0 = torch.tensor(data[batch_idx], device=DEVICE)
@@ -172,16 +174,60 @@ def train_denoiser():
             # Denoising
             x0_hat = model(x_t)
             
-            # Improved binarization strategy:
-            # 1. For positions that were NOT noised, preserve original values
-            # 2. For positions that were noised, use threshold-based binarization
-            x0_hat_bin = x0.clone()  # Start with original values
+            # IMPROVEMENT 1: Soft binarization for differentiable CF loss
+            # Start with original values (preserve non-noised positions)
+            x0_hat_soft = x0.clone()
+            
             # Only change positions that were noised
             noised_positions = (noise_mask > 0)
-            # Apply threshold only to noised positions
-            x0_hat_bin[noised_positions] = (x0_hat[noised_positions] > 0.59).float()
             
-            # Get top-1 recommendations
+            # Apply soft binarization with temperature for differentiable gradients
+            temp = 0.1  # Temperature parameter (lower = more binary-like)
+            threshold = 0.59  # Your threshold from the original code
+            soft_bin = torch.sigmoid((x0_hat[noised_positions] - threshold) / temp)
+            x0_hat_soft[noised_positions] = soft_bin
+            
+            # Get original recommendations
+            with torch.no_grad():
+                scores_orig = recommender(x0)  # [batch, num_items]
+                top1_indices = scores_orig.argmax(dim=1)  # [batch]
+                orig_top1_scores = scores_orig.gather(1, top1_indices.unsqueeze(1)).squeeze(1)  # [batch]
+            
+            # IMPROVEMENT 2: Differentiable CF loss on soft output
+            scores_denoised = recommender(x0_hat_soft)  # [batch, num_items]
+            
+            # IMPROVEMENT 3: Better CF loss strategy
+            cf_loss = 0.0
+            for user_idx in range(x0.size(0)):
+                orig_top1 = top1_indices[user_idx]
+                orig_score = orig_top1_scores[user_idx]
+                denoised_scores = scores_denoised[user_idx]
+                
+                # Strategy 1: Directly minimize original top-1 score
+                direct_loss = denoised_scores[orig_top1]
+                
+                # Strategy 2: Encourage ranking change
+                # Find best other item from original scores
+                mask = torch.ones_like(denoised_scores, dtype=torch.bool)
+                mask[orig_top1] = False
+                other_scores = denoised_scores[mask]
+                
+                if len(other_scores) > 0:
+                    best_other_score = other_scores.max()
+                    # Encourage best other score to be higher than original top-1
+                    margin = 0.05
+                    ranking_loss = F.relu(denoised_scores[orig_top1] - best_other_score + margin)
+                    cf_loss += direct_loss + ranking_loss
+                else:
+                    cf_loss += direct_loss
+            
+            cf_loss = cf_loss / x0.size(0)
+            
+            # For evaluation only: get hard binarized version
+            x0_hat_bin = x0.clone()
+            x0_hat_bin[noised_positions] = (x0_hat[noised_positions] > threshold).float()
+            
+            # Get top-1 recommendations for evaluation
             top1_orig = []
             top1_denoised = []
             for j in range(x0.size(0)):
@@ -190,32 +236,19 @@ def train_denoiser():
             top1_orig = torch.tensor(top1_orig, device=DEVICE)
             top1_denoised = torch.tensor(top1_denoised, device=DEVICE)
             
-            # Differentiable counterfactual loss (ReLU/margin version)
-            margin = 0.1
-            with torch.no_grad():
-                scores_orig = recommender(x0)  # [batch, num_items]
-            scores_denoised = recommender(x0_hat_bin)  # [batch, num_items]
-            top1_indices = scores_orig.argmax(dim=1)  # [batch]
-            orig_top1_scores = scores_orig.gather(1, top1_indices.unsqueeze(1)).squeeze(1)  # [batch]
-            denoised_top1_scores = scores_denoised.gather(1, top1_indices.unsqueeze(1)).squeeze(1)  # [batch]
-            # Encourage denoised score to be at least margin lower than original
-            cf_loss = F.relu(denoised_top1_scores - orig_top1_scores + margin).mean()
-            
             # Masked reconstruction loss: only penalize errors in noised positions
-            # noise_mask is 1 where noise was added, 0 where no noise was added
             masked_recon_loss = (criterion(x0_hat, x0) * noise_mask).sum() / (noise_mask.sum() + 1e-8)
             
             # L1 loss (encourage minimal changes) - also masked
             masked_l1_loss = ((x0_hat - x0).abs() * noise_mask).sum() / (noise_mask.sum() + 1e-8)
             
-            # NEW: Strong preservation loss for non-noised positions
-            # Create inverse mask (1 where no noise was added)
+            # Strong preservation loss for non-noised positions
             preserve_mask = 1 - noise_mask
-            # Strongly penalize any changes in non-noised positions
             preserve_loss = ((x0_hat - x0).abs() * preserve_mask).sum() / (preserve_mask.sum() + 1e-8)
             
-            # Remove normalization: use raw losses directly
-            loss = (0.0001) * masked_recon_loss + LAMBDA_CF * cf_loss + LAMBDA_L1 * masked_l1_loss + LAMBDA_PRESERVE * preserve_loss
+            # IMPROVEMENT 4: Better loss balancing
+            loss = masked_recon_loss + LAMBDA_CF * cf_loss + LAMBDA_L1 * masked_l1_loss + LAMBDA_PRESERVE * preserve_loss
+            
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
@@ -228,36 +261,43 @@ def train_denoiser():
             total_changed += (top1_orig != top1_denoised).float().sum().item()
             total_count += x0.size(0)
 
-            # Detailed logging for just one example in the middle epoch and middle batch
+            # IMPROVEMENT 5: Better debugging information
             middle_epoch = EPOCHS // 2
             middle_batch = (num_samples // BATCH_SIZE) // 2
             if epoch == middle_epoch and i == middle_batch * BATCH_SIZE:
-                print(f"\n=== MIDDLE EPOCH {epoch+1} MIDDLE BATCH SINGLE EXAMPLE INSPECTION ===")
+                print(f"\n=== MIDDLE EPOCH {epoch+1} MIDDLE BATCH INSPECTION (DIFFERENTIABLE) ===")
                 k = 0  # Only the first example
                 x0_k = x0[k].cpu().numpy()
                 x_t_k = x_t[k].cpu().numpy()
                 x0_hat_k = x0_hat[k].detach().cpu().numpy()
                 x0_hat_bin_k = x0_hat_bin[k].cpu().numpy()
+                x0_hat_soft_k = x0_hat_soft[k].detach().cpu().numpy()
                 noise_mask_k = noise_mask[k].cpu().numpy()
+                
                 ones_orig = np.sum(x0_k)
                 ones_noisy = np.sum(x_t_k)
                 ones_denoised = np.sum(x0_hat_bin_k)
+                ones_soft = np.sum(x0_hat_soft_k)
                 ones_noised = np.sum(noise_mask_k)
-                print(f"Original 1s: {ones_orig}, Noisy 1s: {ones_noisy}, Denoised 1s: {ones_denoised}")
-                print(f"Noise level (t): {t[k].item()}, Noise prob: {0.2 * t[k].item() / 10:.6f}")
+                
+                # CF loss debugging
+                orig_top1 = top1_indices[k].item()
+                orig_score = orig_top1_scores[k].item()
+                denoised_scores_k = scores_denoised[k].detach().cpu().numpy()
+                best_other_score = denoised_scores_k[denoised_scores_k != denoised_scores_k[orig_top1]].max()
+                
+                print(f"Original 1s: {ones_orig}, Noisy 1s: {ones_noisy}")
+                print(f"Soft denoised 1s: {ones_soft:.2f}, Hard denoised 1s: {ones_denoised}")
                 print(f"Positions noised: {ones_noised}")
-                print(f"Items removed by noise: {ones_orig - ones_noisy}")
                 print(f"Items changed by denoising: {np.sum(x0_k != x0_hat_bin_k)}")
-                print(f"Ratio (changed/noised): {np.sum(x0_k != x0_hat_bin_k) / (ones_noised + 1e-8):.2f}")
-                changed_indices = np.where(x0_k != x0_hat_bin_k)[0]
-                noised_indices = np.where(noise_mask_k > 0)[0]
-                print(f"Noised indices (first 10): {noised_indices[:10]}")
-                print(f"Changed indices (first 10): {changed_indices[:10]}")
+                print(f"CF Loss Debug - Original top-1: {orig_top1}, Original score: {orig_score:.4f}")
+                print(f"CF Loss Debug - Best other score: {best_other_score:.4f}, Margin: {orig_score - best_other_score:.4f}")
                 print(f"Original top-1: {top1_orig[k].item()}, Denoised top-1: {top1_denoised[k].item()}")
                 print(f"Recommendation changed: {top1_orig[k].item() != top1_denoised[k].item()}")
-                print(f"Original (first 10): {x0_k[:10]}")
-                print(f"Denoised (first 10, rounded): {np.round(x0_hat_k[:10], 3)}")
-                print(f"Binarized (first 10): {x0_hat_bin_k[:10]}")
+                print(f"Soft vs Hard comparison (first 10):")
+                print(f"  Soft: {x0_hat_soft_k[:10]}")
+                print(f"  Hard: {x0_hat_bin_k[:10]}")
+        
         avg_loss = total_loss / num_samples
         avg_cf_loss = total_cf_loss / num_samples
         avg_recon_loss = total_recon_loss / num_samples
@@ -265,6 +305,7 @@ def train_denoiser():
         avg_preserve_loss = total_preserve_loss / num_samples
         change_rate = total_changed / total_count
         print(f"Epoch {epoch+1}/{EPOCHS} - Total Loss: {avg_loss:.4f} | Recon Loss: {avg_recon_loss:.4f} | CF Loss: {avg_cf_loss:.4f} | L1 Loss: {avg_l1_loss:.4f} | Preserve Loss: {avg_preserve_loss:.4f} | Change Rate: {change_rate:.2%}")
+        
         # Record losses for visualization
         total_losses.append(avg_loss)
         recon_losses.append(avg_recon_loss)
@@ -273,12 +314,12 @@ def train_denoiser():
         preserve_losses.append(avg_preserve_loss)
         change_rates.append(change_rate)
 
-        # === Save checkpoint only if this is the best model so far ===
+        # Save checkpoint if this is the best model so far
         if avg_loss < best_loss:
             best_loss = avg_loss
             checkpoint_dir = Path("checkpoints/diffusionModels")
             checkpoint_dir.mkdir(parents=True, exist_ok=True)
-            checkpoint_filename = f"best_denoiser_ML1M_bs{BATCH_SIZE}_lr{LEARNING_RATE}_lcf{LAMBDA_CF}_l1{LAMBDA_L1}_pres{LAMBDA_PRESERVE}.pt"
+            checkpoint_filename = f"best_differentiable_denoiser_ML1M_bs{BATCH_SIZE}_lr{LEARNING_RATE}_lcf{LAMBDA_CF}_l1{LAMBDA_L1}_pres{LAMBDA_PRESERVE}.pt"
             checkpoint_path = checkpoint_dir / checkpoint_filename
             torch.save(model.state_dict(), checkpoint_path)
             best_checkpoint_path = checkpoint_path
