@@ -23,12 +23,12 @@ CHECKPOINT_PATH = Path('checkpoints/recommenders/VAE_ML1M_0_19_128.pt')
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 USER_HISTORY_DIM = 3381  # Number of items
 BATCH_SIZE = 128
-EPOCHS = 10
+EPOCHS = 20
 LEARNING_RATE = 0.005
-LAMBDA_CF = 2.9                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 # Weight for counterfactual loss
-LAMBDA_L1 = 0.01   # Increased weight for L1 loss (encourage minimal changes)
-LAMBDA_PRESERVE = 0.5  # New weight to strongly preserve non-noised positions
-max_noise_probability = 0.90
+LAMBDA_CF = 10.0  # Reduced weight for counterfactual loss
+LAMBDA_L1 = 0.9   # Increased weight for L1 loss (encourage minimal changes)
+LAMBDA_PRESERVE = 0.8  # New weight to strongly preserve non-noised positions
+max_noise_probability = 0.8
 
 # ========== DATA LOADING ==========
 def load_user_histories(data_path):
@@ -151,7 +151,7 @@ def train_denoiser():
     preserve_losses = []
     change_rates = []
     for epoch in range(EPOCHS):
-        progress = epoch / (EPOCHS - 1)
+        progress = epoch / (EPOCHS/2)
         current_max_noise_prob = initial_noise_prob + (final_noise_prob - initial_noise_prob) * progress
         perm = np.random.permutation(num_samples)
         total_loss = 0
@@ -174,12 +174,26 @@ def train_denoiser():
             
             # Improved binarization strategy:
             # 1. For positions that were NOT noised, preserve original values
-            # 2. For positions that were noised, use threshold-based binarization
-            x0_hat_bin = x0.clone()  # Start with original values
-            # Only change positions that were noised
-            noised_positions = (noise_mask > 0)
-            # Apply threshold only to noised positions
-            x0_hat_bin[noised_positions] = (x0_hat[noised_positions] > 0.59).float()
+            # 2. For positions that were noised, keep only the top (noised_positions - 10% of noised_positions) values as 1, rest as 0
+            x0_hat_bin = x0.clone()
+            for user_idx in range(x0.shape[0]):
+                noised_idx = (noise_mask[user_idx] > 0).nonzero(as_tuple=True)[0]
+                num_noised = len(noised_idx)
+                if num_noised > 0:
+                    # Calculate k: number of positions to keep as 1
+                    k = int(num_noised - 0.95 * num_noised)
+                    k = max(k, 0)  # Ensure non-negative
+                    values = x0_hat[user_idx, noised_idx]
+                    if k > 0:
+                        topk_values, topk_indices = torch.topk(values, k)
+                        binarized = torch.zeros_like(values)
+                        binarized[topk_indices] = 1.0
+                        x0_hat_bin[user_idx, noised_idx] = binarized
+                    else:
+                        x0_hat_bin[user_idx, noised_idx] = 0.0
+                else:
+                    # No noised positions, nothing to change
+                    pass
             
             # Get top-1 recommendations
             top1_orig = []
@@ -191,7 +205,7 @@ def train_denoiser():
             top1_denoised = torch.tensor(top1_denoised, device=DEVICE)
             
             # Differentiable counterfactual loss (ReLU/margin version)
-            margin = 0.1
+            margin = 0.55
             with torch.no_grad():
                 scores_orig = recommender(x0)  # [batch, num_items]
             scores_denoised = recommender(x0_hat_bin)  # [batch, num_items]
@@ -215,7 +229,7 @@ def train_denoiser():
             preserve_loss = ((x0_hat - x0).abs() * preserve_mask).sum() / (preserve_mask.sum() + 1e-8)
             
             # Remove normalization: use raw losses directly
-            loss = (0.0001) * masked_recon_loss + LAMBDA_CF * cf_loss + LAMBDA_L1 * masked_l1_loss + LAMBDA_PRESERVE * preserve_loss
+            loss = (0.1) * masked_recon_loss + LAMBDA_CF * cf_loss #+ LAMBDA_L1 * masked_l1_loss + LAMBDA_PRESERVE * preserve_loss
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()

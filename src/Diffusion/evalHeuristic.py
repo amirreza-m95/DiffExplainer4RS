@@ -35,13 +35,14 @@ parser.add_argument('--num_layers', type=int, default=4, nargs='?')
 parser.add_argument('--layer_ratio', type=float, default=0.5, nargs='?')
 parser.add_argument('--activation', type=str, default="LeakyReLU", nargs='?')
 parser.add_argument('--use_skip_connection', action='store_true', default=True)
+parser.add_argument('--eval_method', type=str, default="diffusion", choices=["diffusion", "heuristic"], help="Which explainer to evaluate: diffusion or heuristic")
 
 args = parser.parse_args()
 
 DATA_PATH = Path(f'datasets/lxr-CE/{args.data_name}/train_data_{args.data_name}.csv')
 TEST_DATA_PATH = Path(f'datasets/lxr-CE/{args.data_name}/test_data_{args.data_name}.csv')
 STATIC_TEST_DATA_PATH = Path(f'datasets/lxr-CE/{args.data_name}/static_test_data_{args.data_name}.csv')
-CHECKPOINT_PATH = Path('checkpoints/recommenders/VAE_ML1M_0_19_128.pt')
+CHECKPOINT_PATH = Path(f'checkpoints/recommenders/VAE_ML1M_0_19_128.pt')
 DIFFUSION_CHECKPOINT_PATH = Path(f'checkpoints/diffusionModels/{args.checkpoint}')
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -84,6 +85,47 @@ def load_data():
     static_test_array = static_test_data.iloc[:,:-2].values.astype(np.float32)
     
     return train_array, test_array, static_test_array, test_data
+
+# ========== HEURISTIC RATING LOADING ==========
+def load_ratings_and_encoders():
+    """
+    Load raw ratings.dat and build mapping from (encoded_user_id, encoded_item_id) to average rating.
+    Returns: dict[(user_id, item_id)] -> avg_rating
+    """
+    # Load raw ratings
+    ratings_path = Path(f'datasets/lxr-CE/{args.data_name}/ratings.dat')
+    ratings = pd.read_csv(ratings_path, sep='::', engine='python', names=["user_id_original", "item_id_original", "rating", "timestamp"])
+    # Only keep ratings > 3.5
+    ratings = ratings[ratings['rating'] > 3.5]
+    # Compute average rating per (user_id_original, item_id_original)
+    avg_ratings = ratings.groupby(['user_id_original', 'item_id_original'])['rating'].mean().reset_index()
+    # Load processed data to get encoders
+    train_data = pd.read_csv(DATA_PATH, index_col=0)
+    # Get all unique original user/item ids in processed data
+    user_encoder = {orig: idx for idx, orig in enumerate(train_data.index)}
+    item_encoder = {orig: idx for idx, orig in enumerate(train_data.columns)}
+    # But processed data columns are item indices, not original ids, so we need to map using preprocessing.py logic
+    # Instead, load the mapping from preprocessing if available
+    # Try to load mapping from file
+    mapping_path = Path(f'datasets/lxr-CE/{args.data_name}/user_item_mapping.pkl')
+    if mapping_path.exists():
+        with open(mapping_path, 'rb') as f:
+            mapping = pickle.load(f)
+        user_encoder = mapping['user_encoder']
+        item_encoder = mapping['item_encoder']
+    else:
+        # Fallback: try to infer from processed data
+        user_encoder = {orig: idx for idx, orig in enumerate(train_data.index)}
+        item_encoder = {orig: idx for idx, orig in enumerate(train_data.columns)}
+    # Build (encoded_user_id, encoded_item_id) -> avg_rating
+    encoded_rating_dict = {}
+    for _, row in avg_ratings.iterrows():
+        orig_uid, orig_iid, avg_rating = row['user_id_original'], row['item_id_original'], row['rating']
+        if orig_uid in user_encoder and orig_iid in item_encoder:
+            uid = user_encoder[orig_uid]
+            iid = item_encoder[orig_iid]
+            encoded_rating_dict[(uid, iid)] = avg_rating
+    return encoded_rating_dict
 
 # ========== DENOISING MODEL ==========
 class Swish(nn.Module):
@@ -272,6 +314,120 @@ def find_diffusion_mask(user_tensor, item_tensor, item_id, diffusion_model, reco
             if j:
                 item_sim_dict[i] = x_masked[i].item()
         return item_sim_dict
+
+# ========== HEURISTIC EXPLAINER FUNCTIONS ==========
+def find_heuristic_mask(user_id, user_tensor, encoded_rating_dict):
+    """
+    For a given user, return a dict of item indices to their average rating (descending).
+    Items not in the rating dict get -inf (so they're removed last).
+    """
+    item_indices = torch.where(user_tensor > 0)[0].cpu().numpy()
+    item_sim_dict = {}
+    for iid in item_indices:
+        key = (user_id, iid)
+        rating = encoded_rating_dict.get(key, float('-inf'))
+        item_sim_dict[iid] = rating
+    return item_sim_dict
+
+def single_user_expl_heuristic(user_id, user_vector, user_tensor, encoded_rating_dict):
+    user_hist_size = int(np.sum(user_vector))
+    sim_items = find_heuristic_mask(user_id, user_tensor, encoded_rating_dict)
+    POS_sim_items = list(sorted(sim_items.items(), key=lambda item: item[1], reverse=True))[:user_hist_size]
+    return POS_sim_items
+
+def single_user_metrics_heuristic(user_vector, user_tensor, item_id, item_tensor, num_of_bins, recommender_model, expl_dict, **kw_dict):
+    POS_masked = user_tensor
+    NEG_masked = user_tensor
+    POS_masked[item_id] = 0
+    NEG_masked[item_id] = 0
+    user_hist_size = int(np.sum(user_vector))
+    bins = [0] + [len(x) for x in np.array_split(np.arange(user_hist_size), num_of_bins, axis=0)]
+    POS_at_1 = [0] * len(bins)
+    POS_at_5 = [0] * len(bins)
+    POS_at_10 = [0] * len(bins)
+    POS_at_20 = [0] * len(bins)
+    POS_at_50 = [0] * len(bins)
+    POS_at_100 = [0] * len(bins)
+    NEG_at_1 = [0] * len(bins)
+    NEG_at_5 = [0] * len(bins)
+    NEG_at_10 = [0] * len(bins)
+    NEG_at_20 = [0] * len(bins)
+    NEG_at_50 = [0] * len(bins)
+    NEG_at_100 = [0] * len(bins)
+    DEL = [0.0] * len(bins)
+    INS = [0.0] * len(bins)
+    NDCG = [0.0] * len(bins)
+    POS_sim_items = expl_dict
+    NEG_sim_items = list(sorted(dict(POS_sim_items).items(), key=lambda item: item[1], reverse=False))
+    total_items = 0
+    for i in range(len(bins)):
+        total_items += bins[i]
+        POS_masked = torch.zeros_like(user_tensor, dtype=torch.float32, device=DEVICE)
+        for j in POS_sim_items[:total_items]:
+            POS_masked[j[0]] = 1
+        POS_masked = user_tensor - POS_masked
+        NEG_masked = torch.zeros_like(user_tensor, dtype=torch.float32, device=DEVICE)
+        for j in NEG_sim_items[:total_items]:
+            NEG_masked[j[0]] = 1
+        NEG_masked = user_tensor - NEG_masked
+        POS_ranked_list = get_top_k(POS_masked, user_tensor, recommender_model, **kw_dict)
+        if item_id in list(POS_ranked_list.keys()):
+            POS_index = list(POS_ranked_list.keys()).index(item_id) + 1
+        else:
+            POS_index = USER_HISTORY_DIM
+        NEG_index = get_index_in_the_list(NEG_masked, user_tensor, item_id, recommender_model, **kw_dict) + 1
+        POS_at_1[i] = 1 if POS_index <= 1 else 0
+        POS_at_5[i] = 1 if POS_index <= 5 else 0
+        POS_at_10[i] = 1 if POS_index <= 10 else 0
+        POS_at_20[i] = 1 if POS_index <= 20 else 0
+        POS_at_50[i] = 1 if POS_index <= 50 else 0
+        POS_at_100[i] = 1 if POS_index <= 100 else 0
+        NEG_at_1[i] = 1 if NEG_index <= 1 else 0
+        NEG_at_5[i] = 1 if NEG_index <= 5 else 0
+        NEG_at_10[i] = 1 if NEG_index <= 10 else 0
+        NEG_at_20[i] = 1 if NEG_index <= 20 else 0
+        NEG_at_50[i] = 1 if NEG_index <= 50 else 0
+        NEG_at_100[i] = 1 if NEG_index <= 100 else 0
+
+                # Enforce monotonicity: once a metric becomes 0, it should remain 0
+        if i > 0:
+            # For POS metrics: if previous value was 0, current should also be 0
+            if POS_at_1[i-1] == 0:
+                POS_at_1[i] = 0
+            if POS_at_5[i-1] == 0:
+                POS_at_5[i] = 0
+            if POS_at_10[i-1] == 0:
+                POS_at_10[i] = 0
+            if POS_at_20[i-1] == 0:
+                POS_at_20[i] = 0
+            if POS_at_50[i-1] == 0:
+                POS_at_50[i] = 0
+            if POS_at_100[i-1] == 0:
+                POS_at_100[i] = 0
+            
+            # For NEG metrics: if previous value was 0, current should also be 0
+            if NEG_at_1[i-1] == 0:
+                NEG_at_1[i] = 0
+            if NEG_at_5[i-1] == 0:
+                NEG_at_5[i] = 0
+            if NEG_at_10[i-1] == 0:
+                NEG_at_10[i] = 0
+            if NEG_at_20[i-1] == 0:
+                NEG_at_20[i] = 0
+            if NEG_at_50[i-1] == 0:
+                NEG_at_50[i] = 0
+            if NEG_at_100[i-1] == 0:
+                NEG_at_100[i] = 0
+        
+
+        DEL[i] = float(recommender_run(POS_masked, recommender_model, item_tensor, item_id, **kw_dict).detach().cpu().numpy())
+        INS[i] = float(recommender_run(user_tensor - POS_masked, recommender_model, item_tensor, item_id, **kw_dict).detach().cpu().numpy())
+        NDCG[i] = get_ndcg(list(POS_ranked_list.keys()), item_id, **kw_dict)
+    res = [DEL, INS, NDCG, POS_at_1, POS_at_5, POS_at_10, POS_at_20, POS_at_50, POS_at_100, 
+           NEG_at_1, NEG_at_5, NEG_at_10, NEG_at_20, NEG_at_50, NEG_at_100]
+    for i in range(len(res)):
+        res[i] = np.array(res[i])
+    return res
 
 # ========== EVALUATION FUNCTIONS ==========
 def single_user_expl_diffusion(user_vector, user_tensor, item_id, item_tensor, recommender, diffusion_model, **kw_dict):
@@ -551,18 +707,157 @@ def eval_diffusion_model():
     
     return results
 
+def eval_heuristic_explainer():
+    """
+    Main evaluation function for the heuristic explainer.
+    """
+    print(f"=== Evaluating Heuristic Explainer ===")
+    print(f"Dataset: {args.data_name}")
+    print(f"Recommender: {args.recommender_name}")
+    print(f"Device: {DEVICE}")
+    
+    # Load data
+    train_array, test_array, static_test_array, test_data = load_data()
+    print(f"Loaded data - Train: {train_array.shape}, Test: {test_array.shape}, Static Test: {static_test_array.shape}")
+    
+    # Load recommender model
+    recommender, kw_dict = load_vae_recommender(CHECKPOINT_PATH, DEVICE)
+    print(f"Loaded recommender model")
+    
+    # Load ratings and build encoded rating dict
+    encoded_rating_dict = load_ratings_and_encoders()
+    print(f"Loaded and processed raw ratings for heuristic explainer")
+    
+    # Prepare items array
+    items_array = np.eye(USER_HISTORY_DIM)
+    all_items_tensor = torch.Tensor(items_array).to(DEVICE)
+    kw_dict['all_items_tensor'] = all_items_tensor
+    kw_dict['items_array'] = items_array
+    
+    # Initialize metric arrays
+    num_of_bins = 11
+    users_DEL = np.zeros(num_of_bins + 1)
+    users_INS = np.zeros(num_of_bins + 1)
+    NDCG = np.zeros(num_of_bins + 1)
+    POS_at_1 = np.zeros(num_of_bins + 1)
+    POS_at_5 = np.zeros(num_of_bins + 1)
+    POS_at_10 = np.zeros(num_of_bins + 1)
+    POS_at_20 = np.zeros(num_of_bins + 1)
+    POS_at_50 = np.zeros(num_of_bins + 1)
+    POS_at_100 = np.zeros(num_of_bins + 1)
+    NEG_at_1 = np.zeros(num_of_bins + 1)
+    NEG_at_5 = np.zeros(num_of_bins + 1)
+    NEG_at_10 = np.zeros(num_of_bins + 1)
+    NEG_at_20 = np.zeros(num_of_bins + 1)
+    NEG_at_50 = np.zeros(num_of_bins + 1)
+    NEG_at_100 = np.zeros(num_of_bins + 1)
+    
+    # Evaluate on test set
+    print(f"Starting evaluation on {static_test_array.shape[0]} test users...")
+    
+    with torch.no_grad():
+        for i in range(static_test_array.shape[0]):
+            if i % 500 == 0:
+                print(f"Processing user {i}/{static_test_array.shape[0]}")
+            
+            # Get user data
+            user_vector = static_test_array[i]
+            user_tensor = torch.FloatTensor(user_vector).to(DEVICE)
+            user_id = i  # processed user index matches row index
+            
+            # Get top recommended item
+            item_id = int(get_user_recommended_item(user_tensor, recommender, **kw_dict).detach().cpu().numpy())
+            item_vector = items_array[item_id]
+            item_tensor = torch.FloatTensor(item_vector).to(DEVICE)
+            
+            # Remove the recommended item from user history for evaluation
+            user_vector[item_id] = 0
+            user_tensor[item_id] = 0
+            
+            # Generate explanations using heuristic explainer
+            user_expl = single_user_expl_heuristic(user_id, user_vector, user_tensor, encoded_rating_dict)
+            
+            # Calculate metrics
+            res = single_user_metrics_heuristic(user_vector, user_tensor, item_id, item_tensor, 
+                                                num_of_bins, recommender, user_expl, **kw_dict)
+            
+            # Accumulate metrics
+            users_DEL += res[0]
+            users_INS += res[1]
+            NDCG += res[2]
+            POS_at_1 += res[3]
+            POS_at_5 += res[4]
+            POS_at_10 += res[5]
+            POS_at_20 += res[6]
+            POS_at_50 += res[7]
+            POS_at_100 += res[8]
+            NEG_at_1 += res[9]
+            NEG_at_5 += res[10]
+            NEG_at_10 += res[11]
+            NEG_at_20 += res[12]
+            NEG_at_50 += res[13]
+            NEG_at_100 += res[14]
+    
+    # Calculate averages
+    num_users = static_test_array.shape[0]
+    print(f"\n=== Heuristic Explainer Evaluation Results ===")
+    print(f"Number of users evaluated: {num_users}")
+    print(f"Dataset: {args.data_name}, Recommender: {args.recommender_name}")
+    print(f"\nAverage Metrics:")
+    print(f"DEL: {np.mean(users_DEL)/num_users:.4f}")
+    print(f"INS: {np.mean(users_INS)/num_users:.4f}")
+    print(f"NDCG: {np.mean(NDCG)/num_users:.4f}")
+    print(f"POS@1: {np.mean(POS_at_1)/num_users:.4f}")
+    print(f"POS@5: {np.mean(POS_at_5)/num_users:.4f}")
+    print(f"POS@10: {np.mean(POS_at_10)/num_users:.4f}")
+    print(f"POS@20: {np.mean(POS_at_20)/num_users:.4f}")
+    print(f"POS@50: {np.mean(POS_at_50)/num_users:.4f}")
+    print(f"POS@100: {np.mean(POS_at_100)/num_users:.4f}")
+    print(f"NEG@1: {np.mean(NEG_at_1)/num_users:.4f}")
+    print(f"NEG@5: {np.mean(NEG_at_5)/num_users:.4f}")
+    print(f"NEG@10: {np.mean(NEG_at_10)/num_users:.4f}")
+    print(f"NEG@20: {np.mean(NEG_at_20)/num_users:.4f}")
+    print(f"NEG@50: {np.mean(NEG_at_50)/num_users:.4f}")
+    print(f"NEG@100: {np.mean(NEG_at_100)/num_users:.4f}")
+    
+    return {
+        'DEL': users_DEL / num_users,
+        'INS': users_INS / num_users,
+        'NDCG': NDCG / num_users,
+        'POS_at_1': POS_at_1 / num_users,
+        'POS_at_5': POS_at_5 / num_users,
+        'POS_at_10': POS_at_10 / num_users,
+        'POS_at_20': POS_at_20 / num_users,
+        'POS_at_50': POS_at_50 / num_users,
+        'POS_at_100': POS_at_100 / num_users,
+        'NEG_at_1': NEG_at_1 / num_users,
+        'NEG_at_5': NEG_at_5 / num_users,
+        'NEG_at_10': NEG_at_10 / num_users,
+        'NEG_at_20': NEG_at_20 / num_users,
+        'NEG_at_50': NEG_at_50 / num_users,
+        'NEG_at_100': NEG_at_100 / num_users
+    }
+
 # ========== MAIN ==========
 if __name__ == "__main__":
-    print("=== Diffusion Model Evaluation ===")
+    print("=== Diffusion/Heuristic Model Evaluation ===")
     print("Usage examples:")
     print("  # Use default checkpoint (trial 9)")
-    print("  python src/Diffusion/eval.py")
+    print("  python src/Diffusion/evalHeuristic.py")
+    print("")
+    print("  # Use heuristic explainer")
+    print("  python src/Diffusion/evalHeuristic.py --eval_method heuristic")
     print("")
     print("  # Use a different checkpoint with auto-detection")
-    print("  python src/Diffusion/eval.py --checkpoint best_advanced_diffusion_ML1M_VAE_trial5_epoch15.pt")
+    print("  python src/Diffusion/evalHeuristic.py --checkpoint best_advanced_diffusion_ML1M_VAE_trial5_epoch15.pt")
     print("")
     print("  # Use a different checkpoint with manual architecture specification")
-    print("  python src/Diffusion/eval.py --checkpoint my_checkpoint.pt --hidden_dim 512 --num_layers 3 --activation ReLU")
+    print("  python src/Diffusion/evalHeuristic.py --checkpoint my_checkpoint.pt --hidden_dim 512 --num_layers 3 --activation ReLU")
     print("")
     
-    results = eval_diffusion_model()
+    if args.eval_method == "heuristic":
+        print("Running Heuristic Explainer Evaluation...")
+        results = eval_heuristic_explainer()
+    else:
+        print("Running Diffusion Model Evaluation...")
+        results = eval_diffusion_model()
