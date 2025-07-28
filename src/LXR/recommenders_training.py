@@ -228,7 +228,7 @@ test_losses_dict = {}
 HR10_dict = {}
 
 VAE_config= {
-"enc_dims": [256,64],
+"enc_dims": [256,256],
 "dropout": 0.5,
 "anneal_cap": 0.2,
 "total_anneal_steps": 200000
