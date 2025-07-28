@@ -9,7 +9,7 @@ MODEL_SAVE_PATH = Path('diffusion_mlp_best.pth')
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TIMESTEPS = 1000  # Number of diffusion steps
 BATCH_SIZE = 128
-EPOCHS = 100
+EPOCHS = 500
 LEARNING_RATE = 1e-3
 
 # === Load Data ===

@@ -19,7 +19,7 @@ DIFFUSION_MODEL_PATH = Path('diffusion_mlp_best.pth')
 EMBEDDING_DIM = 64  # Latent dimension of VAE
 USER_HISTORY_DIM = 3381  # Number of items in ML1M
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-TIMESTEPS = 1000  # Number of diffusion steps
+TIMESTEPS = 120  # Number of diffusion steps
 GUIDANCE_LAMBDA = 2.0  # Strength of guidance during sampling
 NUM_BINS = 10  # Number of bins for evaluation (10% increments)
 
@@ -109,22 +109,21 @@ def decode_embedding(embedding, vae):
         h = layer(h)
     return h.squeeze(0)
 
-def get_top_k(user_tensor, recommender, k=10):
+def get_top_k(user_tensor, recommender):
     """
-    Get the top-k recommended items for a user profile.
+    Get the full sorted list of recommended items for a user profile.
     Args:
         user_tensor: torch.Tensor of shape (USER_HISTORY_DIM,)
         recommender: VAE model
-        k: int
     Returns:
-        dict: {item_index: score}
+        dict: {item_index: score}, sorted by score descending
     """
     with torch.no_grad():
         scores = recommender(user_tensor.unsqueeze(0)).squeeze(0)
         # Mask out items the user already has
         scores[user_tensor > 0] = float('-inf')
-        top_k_indices = torch.topk(scores, k).indices
-        return {i: scores[i] for i in top_k_indices}
+        sorted_indices = torch.argsort(scores, descending=True)
+        return {i.item(): scores[i].item() for i in sorted_indices}
 
 def get_index_in_the_list(user_tensor, item_id, recommender):
     """
@@ -204,6 +203,29 @@ def sample_counterfactual(orig_embedding, orig_profile, vae, diffusion, guidance
         x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
         # Guidance: encourage removal of important items
         x.requires_grad_(True)
+        # cf_preferences = decode_embedding(x.squeeze(0), vae)
+        # user_items = torch.where(orig_profile == 1)[0]
+
+        # # Mask out user items for recommendation
+        # cf_preferences_masked = cf_preferences.clone()
+        # cf_preferences_masked[user_items] = float('-inf')
+        # top1_idx = torch.argmax(cf_preferences_masked)
+
+        # # Loss to reduce the score of the top-1 recommended item
+        # top1_loss = guidance_lambda * cf_preferences[top1_idx]
+
+        # # (Optional) Existing loss for user items
+        # if len(user_items) > 0:
+        #     item_scores = cf_preferences[user_items]
+        #     top_user_item_idx = torch.argmax(item_scores)
+        #     user_item_loss = guidance_lambda * item_scores[top_user_item_idx]
+        #     # Combine losses (e.g., sum or weighted sum)
+        #     loss = user_item_loss + top1_loss
+        # else:
+        #     loss = top1_loss
+
+        # grad = torch.autograd.grad(loss, x)[0]
+        # x = x - 0.1 * grad
         cf_preferences = decode_embedding(x.squeeze(0), vae)
         user_items = torch.where(orig_profile == 1)[0]
         if len(user_items) > 0:
@@ -211,6 +233,99 @@ def sample_counterfactual(orig_embedding, orig_profile, vae, diffusion, guidance
             # Encourage removal of the item with highest score
             top_item_idx = torch.argmax(item_scores)
             loss = guidance_lambda * item_scores[top_item_idx]
+            grad = torch.autograd.grad(loss, x)[0]
+            x = x - 0.1 * grad
+        x = x.detach()
+        # print(f"Top-1 score before: {cf_preferences[top1_idx].item()}")
+    return x.squeeze(0)
+
+def sample_counterfactual_top1(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
+    """
+    Generate a counterfactual embedding by always penalizing the original top-1 user item.
+    Args:
+        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
+        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
+        vae: VAE model
+        diffusion: DiffusionMLP model
+        guidance_lambda: float
+    Returns:
+        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
+    """
+    # Identify the original top-1 user item
+    cf_preferences = decode_embedding(orig_embedding, vae)
+    user_items = torch.where(orig_profile == 1)[0]
+    if len(user_items) > 0:
+        item_scores = cf_preferences[user_items]
+        top_item_idx = torch.argmax(item_scores)
+        target_item = user_items[top_item_idx]
+    else:
+        target_item = None
+
+    x = orig_embedding.clone().detach().unsqueeze(0)
+    for t in reversed(range(TIMESTEPS)):
+        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
+        with torch.no_grad():
+            noise_pred = diffusion(x, t_tensor)
+        alpha_t = alphas[t]
+        alpha_cumprod_t = alphas_cumprod[t]
+        if t > 0:
+            noise = torch.randn_like(x)
+        else:
+            noise = torch.zeros_like(x)
+        coef1 = 1.0 / torch.sqrt(alpha_t)
+        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
+        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
+        x.requires_grad_(True)
+        if target_item is not None:
+            cf_preferences = decode_embedding(x.squeeze(0), vae)
+            loss = guidance_lambda * cf_preferences[target_item]
+            grad = torch.autograd.grad(loss, x)[0]
+            x = x - 0.1 * grad
+        x = x.detach()
+    return x.squeeze(0)
+
+def sample_counterfactual_topX(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA, top_percent=0.1):
+    """
+    Generate a counterfactual embedding by always penalizing the original top X% user items.
+    Args:
+        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
+        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
+        vae: VAE model
+        diffusion: DiffusionMLP model
+        guidance_lambda: float
+        top_percent: float (e.g., 0.1 for top 10%)
+    Returns:
+        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
+    """
+    # Identify the original top X% user items
+    cf_preferences = decode_embedding(orig_embedding, vae)
+    user_items = torch.where(orig_profile == 1)[0]
+    if len(user_items) > 0:
+        item_scores = cf_preferences[user_items]
+        num_top = max(1, int(len(user_items) * top_percent))
+        sorted_indices = torch.argsort(item_scores, descending=True)
+        target_items = user_items[sorted_indices[:num_top]]
+    else:
+        target_items = []
+
+    x = orig_embedding.clone().detach().unsqueeze(0)
+    for t in reversed(range(TIMESTEPS)):
+        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
+        with torch.no_grad():
+            noise_pred = diffusion(x, t_tensor)
+        alpha_t = alphas[t]
+        alpha_cumprod_t = alphas_cumprod[t]
+        if t > 0:
+            noise = torch.randn_like(x)
+        else:
+            noise = torch.zeros_like(x)
+        coef1 = 1.0 / torch.sqrt(alpha_t)
+        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
+        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
+        x.requires_grad_(True)
+        if len(target_items) > 0:
+            cf_preferences = decode_embedding(x.squeeze(0), vae)
+            loss = guidance_lambda * cf_preferences[target_items].sum()
             grad = torch.autograd.grad(loss, x)[0]
             x = x - 0.1 * grad
         x = x.detach()
@@ -235,7 +350,7 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
     
     # Get items the user has and their importance scores
     user_items = torch.where(user_tensor == 1)[0]
-    user_hist_size = len(user_items)
+    user_hist_size = len(user_items) # why not user_vector? because they are the same
     
     if user_hist_size == 0:
         # User has no items, return default metrics
@@ -243,8 +358,10 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
     
     # Sort items by importance (highest first for removal)
     item_scores = cf_preferences[user_items]
-    sorted_indices = torch.argsort(item_scores, descending=True)
-    sorted_items = user_items[sorted_indices]
+    sorted_indices_pos = torch.argsort(item_scores, descending=True)
+    sorted_items_pos = user_items[sorted_indices_pos]
+    sorted_indices_neg = torch.argsort(item_scores, descending=False)
+    sorted_items_neg = user_items[sorted_indices_neg]
     
     # Create bins (10% increments)
     bins = [0] + [len(x) for x in np.array_split(np.arange(user_hist_size), NUM_BINS, axis=0)]
@@ -272,21 +389,27 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
     for i in range(len(bins)):
         total_items += bins[i]
         
-        # Create masked profile by removing top-N most important items
-        masked_profile = user_tensor.clone()
+        # POS: remove most important items
+        masked_profile_pos = user_tensor.clone()
         if total_items > 0:
-            items_to_remove = sorted_items[:total_items]
-            masked_profile[items_to_remove] = 0
+            items_to_remove_pos = sorted_items_pos[:total_items]
+            masked_profile_pos[items_to_remove_pos] = 0
+        
+        # NEG: remove least important items
+        masked_profile_neg = user_tensor.clone()
+        if total_items > 0:
+            items_to_remove_neg = sorted_items_neg[:total_items]
+            masked_profile_neg[items_to_remove_neg] = 0
         
         # Get ranked lists
-        POS_ranked_list = get_top_k(masked_profile, recommender)
+        POS_ranked_list = get_top_k(masked_profile_pos, recommender)
         
         if item_id in list(POS_ranked_list.keys()):
             POS_index = list(POS_ranked_list.keys()).index(item_id) + 1
         else:
             POS_index = USER_HISTORY_DIM
-            
-        NEG_index = get_index_in_the_list(masked_profile, item_id, recommender) + 1
+        
+        NEG_index = get_index_in_the_list(masked_profile_neg, item_id, recommender) + 1
         
         # Calculate metrics
         POS_at_1[i] = 1 if POS_index <= 1 else 0
@@ -302,12 +425,42 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
         NEG_at_20[i] = 1 if NEG_index <= 20 else 0
         NEG_at_50[i] = 1 if NEG_index <= 50 else 0
         NEG_at_100[i] = 1 if NEG_index <= 100 else 0
+
+        # if i > 0:
+        #     # For POS metrics: if previous value was 0, current should also be 0
+        #     if POS_at_1[i-1] == 0:
+        #         POS_at_1[i] = 0
+        #     if POS_at_5[i-1] == 0:
+        #         POS_at_5[i] = 0
+        #     if POS_at_10[i-1] == 0:
+        #         POS_at_10[i] = 0
+        #     if POS_at_20[i-1] == 0:
+        #         POS_at_20[i] = 0
+        #     if POS_at_50[i-1] == 0:
+        #         POS_at_50[i] = 0
+        #     if POS_at_100[i-1] == 0:
+        #         POS_at_100[i] = 0
+            
+        #     # For NEG metrics: if previous value was 0, current should also be 0
+        #     if NEG_at_1[i-1] == 0:
+        #         NEG_at_1[i] = 0
+        #     if NEG_at_5[i-1] == 0:
+        #         NEG_at_5[i] = 0
+        #     if NEG_at_10[i-1] == 0:
+        #         NEG_at_10[i] = 0
+        #     if NEG_at_20[i-1] == 0:
+        #         NEG_at_20[i] = 0
+        #     if NEG_at_50[i-1] == 0:
+        #         NEG_at_50[i] = 0
+        #     if NEG_at_100[i-1] == 0:
+        #         NEG_at_100[i] = 0
+
         
         # Calculate DEL and INS
         item_tensor = torch.zeros(USER_HISTORY_DIM, device=DEVICE)
         item_tensor[item_id] = 1.0
-        DEL[i] = float(recommender_run(masked_profile, recommender, item_tensor, item_id).detach().cpu().numpy())
-        INS[i] = float(recommender_run(user_tensor - masked_profile, recommender, item_tensor, item_id).detach().cpu().numpy())
+        DEL[i] = float(recommender_run(masked_profile_pos, recommender, item_tensor, item_id).detach().cpu().numpy())
+        INS[i] = float(recommender_run(user_tensor - masked_profile_pos, recommender, item_tensor, item_id).detach().cpu().numpy())
         NDCG[i] = get_ndcg(list(POS_ranked_list.keys()), item_id)
     
     res = [DEL, INS, NDCG, POS_at_1, POS_at_5, POS_at_10, POS_at_20, POS_at_50, POS_at_100, 
@@ -373,7 +526,7 @@ def main():
             sorted_indices = torch.argsort(item_scores, descending=True)
             sorted_items = user_items[sorted_indices]
             # Remove top 10% most important items for reporting
-            num_remove = max(1, user_hist_size // 10)
+            num_remove = max(1, user_hist_size // 50)
             items_removed = sorted_items[:num_remove].cpu().numpy().tolist()
             # Create masked profile by removing these items
             masked_profile = user_tensor.clone()
@@ -388,7 +541,8 @@ def main():
             new_top1 = orig_top1
         if new_top1 == orig_top1:
             print(f"User {idx}: orig_top1={orig_top1}, new_top1={new_top1}, items_removed={items_removed}, user_hist_len={user_hist_size}")
-        
+        else:
+            print(f"successful the user history is {user_hist_size}")
         # Calculate metrics for this user
         res = single_user_metrics_embedding_diffusion(user_vec, user_tensor, item_id, cf_emb, vae, vae)
         
