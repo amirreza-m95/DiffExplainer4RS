@@ -9,18 +9,18 @@ import pickle
 # Add LXR directory to path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'LXR')))
 from recommenders_architecture import VAE
-from diffusion_model import DiffusionMLP
+from diffusion_model import DiffusionMLP, TransformerDiffusionModel
 
 # === CONFIGURATION ===
 # Paths to data and model checkpoints
 TEST_DATA_PATH = Path('datasets/lxr-CE/ML1M/test_data_ML1M.csv')
 VAE_CHECKPOINT_PATH = Path('checkpoints/recommenders/VAE_ML1M_0_19_128.pt')
-DIFFUSION_MODEL_PATH = Path('diffusion_mlp_best.pth')
+DIFFUSION_MODEL_PATH = Path('checkpoints/diffusionModels/diffusion_transformer_best_aug5th_loss_120.pth')
 EMBEDDING_DIM = 64  # Latent dimension of VAE
 USER_HISTORY_DIM = 3381  # Number of items in ML1M
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-TIMESTEPS = 120  # Number of diffusion steps
-GUIDANCE_LAMBDA = 2.0  # Strength of guidance during sampling
+TIMESTEPS = 50  # Number of diffusion steps
+GUIDANCE_LAMBDA = 6.0  # Strength of guidance during sampling
 NUM_BINS = 10  # Number of bins for evaluation (10% increments)
 
 # VAE config (should match training)
@@ -65,7 +65,14 @@ for param in vae.parameters():
 # that takes a noisy embedding and timestep as input
 # and predicts the noise
 
-diffusion = DiffusionMLP(EMBEDDING_DIM).to(DEVICE)
+# diffusion = DiffusionMLP(EMBEDDING_DIM).to(DEVICE)
+diffusion = TransformerDiffusionModel(
+    embedding_dim=EMBEDDING_DIM,
+    hidden_dim=256,
+    num_layers=6,
+    num_heads=8,
+    dropout=0.1
+).to(DEVICE)
 diffusion.load_state_dict(torch.load(DIFFUSION_MODEL_PATH, map_location=DEVICE))
 diffusion.eval()
 
@@ -203,8 +210,8 @@ def sample_counterfactual(orig_embedding, orig_profile, vae, diffusion, guidance
         x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
         # Guidance: encourage removal of important items
         x.requires_grad_(True)
-        # cf_preferences = decode_embedding(x.squeeze(0), vae)
-        # user_items = torch.where(orig_profile == 1)[0]
+        cf_preferences = decode_embedding(x.squeeze(0), vae)
+        user_items = torch.where(orig_profile == 1)[0]
 
         # # Mask out user items for recommendation
         # cf_preferences_masked = cf_preferences.clone()
@@ -329,6 +336,122 @@ def sample_counterfactual_topX(orig_embedding, orig_profile, vae, diffusion, gui
             grad = torch.autograd.grad(loss, x)[0]
             x = x - 0.1 * grad
         x = x.detach()
+    return x.squeeze(0)
+
+def sample_counterfactual_top1_target(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
+    """
+    Generate a counterfactual embedding by targeting the top-1 recommendation.
+    This approach is more meaningful as it shows what changes would alter the 
+    primary recommendation given to the user.
+    
+    Args:
+        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
+        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
+        vae: VAE model
+        diffusion: DiffusionMLP model
+        guidance_lambda: float
+    Returns:
+        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
+    """
+    x = orig_embedding.clone().detach().unsqueeze(0)
+    
+    for t in reversed(range(TIMESTEPS)):
+        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
+        
+        with torch.no_grad():
+            noise_pred = diffusion(x, t_tensor)
+        
+        alpha_t = alphas[t]
+        alpha_cumprod_t = alphas_cumprod[t]
+        
+        if t > 0:
+            noise = torch.randn_like(x)
+        else:
+            noise = torch.zeros_like(x)
+        
+        coef1 = 1.0 / torch.sqrt(alpha_t)
+        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
+        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
+        
+        # Enhanced guidance: Target the top-1 recommendation
+        x.requires_grad_(True)
+        cf_preferences = decode_embedding(x.squeeze(0), vae)
+        user_items = torch.where(orig_profile == 1)[0]
+        
+        # Mask out user items to find top-1 recommendation
+        cf_preferences_masked = cf_preferences.clone()
+        cf_preferences_masked[user_items] = float('-inf')
+        top1_idx = torch.argmax(cf_preferences_masked)
+        
+        # Loss to reduce the score of the top-1 recommended item
+        top1_loss = guidance_lambda * cf_preferences[top1_idx]
+        
+        # Apply gradient to move embedding away from this recommendation
+        grad = torch.autograd.grad(top1_loss, x)[0]
+        x = x - 0.1 * grad
+        x = x.detach()
+        
+    return x.squeeze(0)
+
+def sample_counterfactual_integrated_guidance(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
+    """
+    Generate counterfactual embedding with guidance integrated into the diffusion process.
+    This approach modifies the noise prediction to incorporate guidance directly.
+    
+    Args:
+        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
+        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
+        vae: VAE model
+        diffusion: DiffusionMLP model
+        guidance_lambda: float
+    Returns:
+        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
+    """
+    x = orig_embedding.clone().detach().unsqueeze(0)
+    
+    for t in reversed(range(TIMESTEPS)):
+        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
+        
+        # Get base noise prediction
+        with torch.no_grad():
+            base_noise_pred = diffusion(x, t_tensor)
+        
+        # Apply guidance by modifying the noise prediction
+        x.requires_grad_(True)
+        
+        # Get current preferences
+        cf_preferences = decode_embedding(x.squeeze(0), vae)
+        user_items = torch.where(orig_profile == 1)[0]
+        
+        # Find top-1 recommendation (excluding user items)
+        cf_preferences_masked = cf_preferences.clone()
+        cf_preferences_masked[user_items] = float('-inf')
+        top1_idx = torch.argmax(cf_preferences_masked)
+        
+        # Create guidance loss
+        guidance_loss = guidance_lambda * cf_preferences[top1_idx]
+        
+        # Compute gradient with respect to the embedding
+        grad = torch.autograd.grad(guidance_loss, x)[0]
+        
+        # Modify noise prediction to incorporate guidance
+        # This is the key insight: we modify the noise prediction, not the embedding directly
+        guided_noise_pred = base_noise_pred - guidance_lambda * grad
+        
+        # Apply the guided noise prediction
+        alpha_t = alphas[t]
+        alpha_cumprod_t = alphas_cumprod[t]
+        
+        if t > 0:
+            noise = torch.randn_like(x)
+        else:
+            noise = torch.zeros_like(x)
+        
+        coef1 = 1.0 / torch.sqrt(alpha_t)
+        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
+        x = coef1 * (x - coef2 * guided_noise_pred) + torch.sqrt(betas[t]) * noise
+        x = x.detach()
+        
     return x.squeeze(0)
 
 def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, cf_embedding, vae, recommender):
@@ -479,7 +602,7 @@ def main():
     Aggregates and prints/saves average metrics across all users.
     """
     test_users, user_indices = load_test_users()
-    test_users = test_users[:10] # number of users to evaluate
+    test_users = test_users[:] # number of users to evaluate
     
     # Initialize metric arrays
     users_DEL = np.zeros(NUM_BINS + 1)
@@ -515,7 +638,8 @@ def main():
         orig_top1 = item_id
         
         # Generate counterfactual embedding
-        cf_emb = sample_counterfactual(orig_emb, user_tensor, vae, diffusion)
+        # cf_emb = sample_counterfactual(orig_emb, user_tensor, vae, diffusion)
+        cf_emb = sample_counterfactual_integrated_guidance(orig_emb, user_tensor, vae, diffusion)
         
         # Decode counterfactual embedding to get importance scores
         cf_preferences = decode_embedding(cf_emb, vae)
@@ -526,7 +650,7 @@ def main():
             sorted_indices = torch.argsort(item_scores, descending=True)
             sorted_items = user_items[sorted_indices]
             # Remove top 10% most important items for reporting
-            num_remove = max(1, user_hist_size // 50)
+            num_remove = max(1, user_hist_size // 10)
             items_removed = sorted_items[:num_remove].cpu().numpy().tolist()
             # Create masked profile by removing these items
             masked_profile = user_tensor.clone()
