@@ -2,10 +2,11 @@ import torch
 import numpy as np
 from pathlib import Path
 from diffusion_model import DiffusionMLP
+from diffusion_model import TransformerDiffusionModel
 
 # === CONFIGURATION ===
-EMBEDDING_PATH = Path('user_embeddings.npy')
-MODEL_SAVE_PATH = Path('diffusion_mlp_best.pth')
+EMBEDDING_PATH = Path('checkpoints/diffusionModels/user_embeddings.npy')
+MODEL_SAVE_PATH = Path('checkpoints/diffusionModels/diffusion_transformer_best_aug5th.pth')
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 TIMESTEPS = 1000  # Number of diffusion steps
 BATCH_SIZE = 128
@@ -28,7 +29,17 @@ sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
 
 # === Model ===
 # MLP-based diffusion model for user embeddings
-model = DiffusionMLP(embedding_dim).to(DEVICE)
+# model = DiffusionMLP(embedding_dim).to(DEVICE)
+
+# Transformer-based diffusion model for user embeddings
+model = TransformerDiffusionModel(
+    embedding_dim=embedding_dim,
+    hidden_dim=256,
+    num_layers=6,
+    num_heads=8,
+    dropout=0.1
+).to(DEVICE)
+
 optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
 loss_fn = torch.nn.MSELoss()
 
