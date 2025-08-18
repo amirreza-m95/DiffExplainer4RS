@@ -33,8 +33,14 @@ from scipy import sparse
 import os
 import argparse
 
-data_name = "ML1M" ### Can be ML1M, Yahoo, Pinterest
-recommender_name = "VAE" ## Can be MLP, VAE, MLP_model, GMF_model, NCF, LightGCN
+data_name = "Pinterest" ### Can be ML1M, Yahoo, Pinterest
+recommender_name = "MLP" ## Can be MLP, VAE, MLP_model, GMF_model, NCF, LightGCN
+
+# Early stopping configuration
+EARLY_STOPPING_ENABLED = True
+EARLY_STOPPING_PATIENCE = 5  # Number of epochs to wait before stopping
+EARLY_STOPPING_MIN_EPOCHS = 6  # Minimum epochs before early stopping can trigger
+EARLY_STOPPING_METRIC = 'hit_rate_10'  # 'hit_rate_10' or 'loss'
 
 DP_DIR = Path("datasets", "lxr-CE", data_name)
 export_dir = Path(os.getcwd())
@@ -43,7 +49,7 @@ checkpoints_path = Path(export_dir, "checkpoints", "recommenders")
 Neucheckpoints_path = Path(export_dir, "checkpoints", "recommenders")
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 device = 'cpu'
-# print(f'device is set to {device}')
+print(f'[INFO] Using device: {device}')
 
 output_type_dict = {
     "VAE":"multiple",
@@ -68,7 +74,7 @@ test_losses_dict = {}
 HR10_dict = {}
 
 ITERATIONS = 5000
-EPOCHS = 20
+EPOCHS = 30
 
 BATCH_SIZE = 1024
 LR = 1e-3
@@ -76,7 +82,16 @@ ITERS_PER_EVAL = 200
 ITERS_PER_LR_DECAY = 200
 LAMBDA = 1e-6
 
-
+print(f'[INFO] Training Configuration:')
+print(f'  - Dataset: {data_name} ({num_users_dict[data_name]} users, {num_items_dict[data_name]} items)')
+print(f'  - Recommender: {recommender_name}')
+print(f'  - Output type: {output_type_dict[recommender_name]}')
+print(f'  - Device: {device}')
+print(f'[INFO] Early Stopping Configuration:')
+print(f'  - Enabled: {EARLY_STOPPING_ENABLED}')
+print(f'  - Patience: {EARLY_STOPPING_PATIENCE} epochs')
+print(f'  - Minimum epochs: {EARLY_STOPPING_MIN_EPOCHS}')
+print(f'  - Metric: {EARLY_STOPPING_METRIC}')
 
 output_type = output_type_dict[recommender_name] ### Can be single, multiple
 num_users = num_users_dict[data_name] 
@@ -92,6 +107,9 @@ test_array = test_data.to_numpy()
 items_array = np.eye(num_items)
 all_items_tensor = torch.Tensor(items_array).to(device)
 
+print(f'[INFO] Data loaded successfully:')
+print(f'  - Training samples: {len(train_array)}')
+print(f'  - Test samples: {len(test_array)}')
 
 for row in range(static_test_data.shape[0]):
     static_test_data.iloc[row, static_test_data.iloc[row,-2]]=0
@@ -117,21 +135,54 @@ train_losses_dict = {}
 test_losses_dict = {}
 HR10_dict = {}
 
+def check_early_stopping(epoch, test_losses, patience, min_epochs):
+    """
+    Check if early stopping should be triggered.
+    
+    Args:
+        epoch: Current epoch number
+        test_losses: List of test losses (negative hit rates)
+        patience: Number of epochs to wait before stopping
+        min_epochs: Minimum epochs before early stopping can trigger
+    
+    Returns:
+        bool: True if early stopping should be triggered
+    """
+    if not EARLY_STOPPING_ENABLED or epoch < min_epochs or len(test_losses) < patience + 1:
+        return False
+    
+    # Check if performance has been degrading for 'patience' consecutive epochs
+    for i in range(patience):
+        if test_losses[-(i+1)] <= test_losses[-(i+2)]:
+            return False
+    
+    return True
+
 def MLP_objective(trial):
     
     lr = trial.suggest_float('learning_rate', 0.001, 0.01)
     batch_size = trial.suggest_categorical('batch_size', [256, 512, 1024])
     hidden_dim = trial.suggest_categorical('hidden_dim', [64, 128, 256, 512])
     beta = trial.suggest_float('beta', 0, 4) # hyperparameter that weights the different loss terms
-    epochs = 10
+    epochs = 40
     model = MLP(hidden_dim, **kw_dict)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     train_losses = []
     test_losses = []
     hr10 = []
     
-    print(f'======================== new run - {recommender_name} ========================')
-    logger.info(f'======================== new run - {recommender_name} ========================')
+    # Track best performance for smart checkpoint saving
+    best_hit_rate = 0.0
+    best_epoch = -1
+    
+    print(f'[TRIAL {trial.number}] ========== Starting new MLP training run ==========')
+    print(f'[TRIAL {trial.number}] Hyperparameters:')
+    print(f'  - Learning rate: {lr:.6f}')
+    print(f'  - Batch size: {batch_size}')
+    print(f'  - Hidden dimension: {hidden_dim}')
+    print(f'  - Beta: {beta:.2f}')
+    print(f'  - Epochs: {epochs}')
+    logger.info(f'[TRIAL {trial.number}] ========== Starting new MLP training run ==========')
     
     num_training = train_data.shape[0]
     num_batches = int(np.ceil(num_training / batch_size))
@@ -146,6 +197,7 @@ def MLP_objective(trial):
         if epoch!=0 and epoch%10 == 0: # decrease the learning rate every 10 epochs
             lr = 0.1*lr
             optimizer.lr = lr
+            print(f'[TRIAL {trial.number}] Epoch {epoch}: Learning rate reduced to {lr:.6f}')
         
         for b in range(num_batches):
             optimizer.zero_grad()
@@ -176,11 +228,21 @@ def MLP_objective(trial):
             train_pos_loss.append(pos_loss.item())
             train_neg_loss.append(neg_loss.item())
             
-        print(f'train pos_loss = {np.mean(train_pos_loss)}, neg_loss = {np.mean(train_neg_loss)}')    
-        train_losses.append(np.mean(loss))
-        if epoch % ((epochs*5)/100) == 0:
-            print(f'this model is saved as MLP_{data_name}_{epoch}_{hidden_dim}.pt')
-            torch.save(model.state_dict(), Path(Neucheckpoints_path, f'MLP_{data_name}_{epoch}_{hidden_dim}.pt'))
+        avg_train_loss = np.mean(loss)
+        avg_pos_loss = np.mean(train_pos_loss)
+        avg_neg_loss = np.mean(train_neg_loss)
+        print(f'[TRIAL {trial.number}] Epoch {epoch:2d}/{epochs}:')
+        print(f'  - Training Loss: {avg_train_loss:.4f}')
+        print(f'  - Positive Loss: {avg_pos_loss:.4f}')
+        print(f'  - Negative Loss: {avg_neg_loss:.4f}')
+        
+        train_losses.append(avg_train_loss)
+        
+        # Smart checkpoint saving - only save if performance improves
+        if epoch % ((epochs*10)/100) == 0:
+            model_filename = f'MLP_{data_name}_{epoch}_{hidden_dim}_{batch_size}_{trial.number}.pt'
+            print(f'[TRIAL {trial.number}] Saving model checkpoint: {model_filename}')
+            torch.save(model.state_dict(), Path(Neucheckpoints_path, model_filename))
         # torch.save(model.state_dict(), Path(checkpoints_path, f'MLP_{data_name}_{round(lr,4)}_{batch_size}_{trial.number}_{epoch}.pt'))
 
 
@@ -202,22 +264,65 @@ def MLP_objective(trial):
         
         pos_loss = torch.mean((torch.ones_like(pos_output)-pos_output)**2)
         neg_loss = torch.mean((neg_output)**2)
-        print(f'test pos_loss = {pos_loss}, neg_loss = {neg_loss}')
+        print(f'  - Test Positive Loss: {pos_loss:.4f}')
+        print(f'  - Test Negative Loss: {neg_loss:.4f}')
         
         hit_rate_at_10, hit_rate_at_50, hit_rate_at_100, MRR, MPR = recommender_evaluations(model, **kw_dict)
         hr10.append(hit_rate_at_10) # metric for monitoring
-        print(hit_rate_at_10, hit_rate_at_50, hit_rate_at_100, MRR, MPR)
+        print(f'  - Evaluation Metrics:')
+        print(f'    * Hit@10:  {hit_rate_at_10:.4f} ({hit_rate_at_10*100:.2f}%)')
+        print(f'    * Hit@50:  {hit_rate_at_50:.4f} ({hit_rate_at_50*100:.2f}%)')
+        print(f'    * Hit@100: {hit_rate_at_100:.4f} ({hit_rate_at_100*100:.2f}%)')
+        print(f'    * MRR:     {MRR:.4f}')
+        print(f'    * MPR:     {MPR:.4f}')
+        
+        # Smart checkpoint saving based on Hit@10 improvement
+        if hit_rate_at_10 > best_hit_rate:
+            best_hit_rate = hit_rate_at_10
+            best_epoch = epoch
+            # Don't save here - we'll save the best checkpoint at the end of the trial
+            print(f'  - 🎯 NEW BEST! Hit@10 improved to {hit_rate_at_10:.4f} ({hit_rate_at_10*100:.2f}%) at epoch {epoch}')
+        else:
+            print(f'  - 📊 No improvement (Best: {best_hit_rate:.4f} at epoch {best_epoch})')
+        
+        print()
         
         test_losses.append(-hit_rate_at_10)
-        if epoch>5: # early stop if the HR@10 decreases for 4 epochs in a row
-            if test_losses[-2]<=test_losses[-1] and test_losses[-3]<=test_losses[-2] and test_losses[-4]<=test_losses[-3]:
-                logger.info(f'Early stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {np.argmin(test_losses)} with value {np.min(test_losses)}')
-                train_losses_dict[trial.number] = train_losses
-                test_losses_dict[trial.number] = test_losses
-                HR10_dict[trial.number] = hr10
-                return max(hr10)
+        
+        # Check early stopping
+        if check_early_stopping(epoch, test_losses, EARLY_STOPPING_PATIENCE, EARLY_STOPPING_MIN_EPOCHS):
+            print(f'[TRIAL {trial.number}] ⚠️  Early stopping triggered!')
+            print(f'[TRIAL {trial.number}] Performance degraded for {EARLY_STOPPING_PATIENCE} consecutive epochs')
+            print(f'[TRIAL {trial.number}] Best performance at epoch {best_epoch} with HR@10: {best_hit_rate:.4f}')
             
-    logger.info(f'Stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {np.argmin(test_losses)} with value {np.min(test_losses)}')
+            # Save the best checkpoint at early stopping
+            model_filename = f'{recommender_name}_{data_name}_TRIAL{trial.number}_FINAL_hr{best_hit_rate:.4f}_epoch{best_epoch}_lr{lr:.6f}_bs{batch_size}'
+            if recommender_name == 'MLP':
+                model_filename += f'_hd{hidden_dim}_beta{beta:.2f}.pt'
+            else:  # VAE
+                model_filename += f'_drop{VAE_config["dropout"]}.pt'
+            print(f'[TRIAL {trial.number}] 💾 Saving final best checkpoint: {model_filename}')
+            torch.save(model.state_dict(), Path(Neucheckpoints_path, model_filename))
+            
+            logger.info(f'[TRIAL {trial.number}] Early stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {best_epoch} with HR@10: {best_hit_rate}')
+            train_losses_dict[trial.number] = train_losses
+            test_losses_dict[trial.number] = test_losses
+            HR10_dict[trial.number] = hr10
+            return max(hr10)
+            
+    print(f'[TRIAL {trial.number}] ✅ Training completed!')
+    print(f'[TRIAL {trial.number}] Best performance at epoch {best_epoch} with HR@10: {best_hit_rate:.4f}')
+    
+    # Save the best checkpoint at the end of training
+    model_filename = f'{recommender_name}_{data_name}_TRIAL{trial.number}_FINAL_hr{best_hit_rate:.4f}_epoch{best_epoch}_lr{lr:.6f}_bs{batch_size}'
+    if recommender_name == 'MLP':
+        model_filename += f'_hd{hidden_dim}_beta{beta:.2f}.pt'
+    else:  # VAE
+        model_filename += f'_drop{VAE_config["dropout"]}.pt'
+    print(f'[TRIAL {trial.number}] 💾 Saving final best checkpoint: {model_filename}')
+    torch.save(model.state_dict(), Path(Neucheckpoints_path, model_filename))
+    
+    logger.info(f'[TRIAL {trial.number}] Stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {best_epoch} with HR@10: {best_hit_rate}')
     train_losses_dict[trial.number] = train_losses
     test_losses_dict[trial.number] = test_losses
     HR10_dict[trial.number] = hr10
@@ -238,24 +343,39 @@ def VAE_objective(trial):
     
     lr = trial.suggest_float('learning_rate', 0.001, 0.01)
     batch_size = trial.suggest_categorical('batch_size', [128,256])
-    epochs = 20
+    epochs = 40
     model = VAE(VAE_config ,**kw_dict)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     train_losses = []
     test_losses = []
     hr10 = []
-    print('======================== new run ========================')
-    logger.info('======================== new run ========================')
+    
+    # Track best performance for smart checkpoint saving
+    best_hit_rate = 0.0
+    best_epoch = -1
+    
+    print(f'[TRIAL {trial.number}] ========== Starting new VAE training run ==========')
+    print(f'[TRIAL {trial.number}] Hyperparameters:')
+    print(f'  - Learning rate: {lr:.6f}')
+    print(f'  - Batch size: {batch_size}')
+    print(f'  - Epochs: {epochs}')
+    print(f'  - Encoder dimensions: {VAE_config["enc_dims"]}')
+    print(f'  - Dropout: {VAE_config["dropout"]}')
+    logger.info(f'[TRIAL {trial.number}] ========== Starting new VAE training run ==========')
     
     for epoch in range(epochs):
         if epoch!=0 and epoch%10 == 0:
             lr = 0.1*lr
             optimizer.lr = lr
+            print(f'[TRIAL {trial.number}] Epoch {epoch}: Learning rate reduced to {lr:.6f}')
         loss = model.train_one_epoch(train_array, optimizer, batch_size)
         train_losses.append(loss)
-        if epoch % ((epochs*5)/100) == 0:
-            print(f'this model is saved as VAE_{data_name}_{trial.number}_{epoch}_{batch_size}.pt')
-            torch.save(model.state_dict(), Path(Neucheckpoints_path, f'VAE_{data_name}_{trial.number}_{epoch}_{batch_size}.pt'))
+        
+        # Smart checkpoint saving - only save if performance improves
+        if epoch % ((epochs*10)/100) == 0:
+            model_filename = f'VAE_{data_name}_{trial.number}_{epoch}_{batch_size}.pt'
+            print(f'[TRIAL {trial.number}] Saving model checkpoint: {model_filename}')
+            torch.save(model.state_dict(), Path(Neucheckpoints_path, model_filename))
         # torch.save(model.state_dict(), Path(checkpoints_path, f'VAE_{data_name}_{trial.number}_{epoch}_{round(lr,4)}_{batch_size}.pt'))
 
 
@@ -269,23 +389,67 @@ def VAE_objective(trial):
         output = model(test_tensor).to(device)
         pos_loss = -output[row_indices,test_pos].mean()
         neg_loss = output[row_indices,test_neg].mean()
-        print(f'pos_loss = {pos_loss}, neg_loss = {neg_loss}')
+        print(f'[TRIAL {trial.number}] Epoch {epoch:2d}/{epochs}:')
+        print(f'  - Training Loss: {loss:.4f}')
+        print(f'  - Test Positive Loss: {pos_loss:.4f}')
+        print(f'  - Test Negative Loss: {neg_loss:.4f}')
         
         hit_rate_at_10, hit_rate_at_50, hit_rate_at_100, MRR, MPR = recommender_evaluations(model, **kw_dict)
         hr10.append(hit_rate_at_10)
-        print('Hit 10,  Hit 50, Hit 100, MPR, MPR')
-        print(hit_rate_at_10, hit_rate_at_50, hit_rate_at_100, MRR, MPR)
+        print(f'  - Evaluation Metrics:')
+        print(f'    * Hit@10:  {hit_rate_at_10:.4f} ({hit_rate_at_10*100:.2f}%)')
+        print(f'    * Hit@50:  {hit_rate_at_50:.4f} ({hit_rate_at_50*100:.2f}%)')
+        print(f'    * Hit@100: {hit_rate_at_100:.4f} ({hit_rate_at_100*100:.2f}%)')
+        print(f'    * MRR:     {MRR:.4f}')
+        print(f'    * MPR:     {MPR:.4f}')
+        
+        # Smart checkpoint saving based on Hit@10 improvement
+        if hit_rate_at_10 > best_hit_rate:
+            best_hit_rate = hit_rate_at_10
+            best_epoch = epoch
+            # Don't save here - we'll save the best checkpoint at the end of the trial
+            print(f'  - 🎯 NEW BEST! Hit@10 improved to {hit_rate_at_10:.4f} ({hit_rate_at_10*100:.2f}%) at epoch {epoch}')
+        else:
+            print(f'  - 📊 No improvement (Best: {best_hit_rate:.4f} at epoch {best_epoch})')
+        
+        print()
         
         test_losses.append(pos_loss.item())
-        if epoch>5:
-            if test_losses[-2]<test_losses[-1] and test_losses[-3]<test_losses[-2] and test_losses[-4]<test_losses[-3]:
-                logger.info(f'Early stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {np.argmin(test_losses)} with value {np.min(test_losses)}')
-                train_losses_dict[trial.number] = train_losses
-                test_losses_dict[trial.number] = test_losses
-                HR10_dict[trial.number] = hr10
-                return max(hr10)
+        
+        # Check early stopping
+        if check_early_stopping(epoch, test_losses, EARLY_STOPPING_PATIENCE, EARLY_STOPPING_MIN_EPOCHS):
+            print(f'[TRIAL {trial.number}] ⚠️  Early stopping triggered!')
+            print(f'[TRIAL {trial.number}] Performance degraded for {EARLY_STOPPING_PATIENCE} consecutive epochs')
+            print(f'[TRIAL {trial.number}] Best performance at epoch {best_epoch} with HR@10: {best_hit_rate:.4f}')
+            
+            # Save the best checkpoint at early stopping
+            model_filename = f'{recommender_name}_{data_name}_TRIAL{trial.number}_FINAL_hr{best_hit_rate:.4f}_epoch{best_epoch}_lr{lr:.6f}_bs{batch_size}'
+            if recommender_name == 'MLP':
+                model_filename += f'_hd{hidden_dim}_beta{beta:.2f}.pt'
+            else:  # VAE
+                model_filename += f'_drop{VAE_config["dropout"]}.pt'
+            print(f'[TRIAL {trial.number}] 💾 Saving final best checkpoint: {model_filename}')
+            torch.save(model.state_dict(), Path(Neucheckpoints_path, model_filename))
+            
+            logger.info(f'[TRIAL {trial.number}] Early stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {best_epoch} with HR@10: {best_hit_rate}')
+            train_losses_dict[trial.number] = train_losses
+            test_losses_dict[trial.number] = test_losses
+            HR10_dict[trial.number] = hr10
+            return max(hr10)
     
-    logger.info(f'Stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {np.argmin(test_losses)} with value {np.min(test_losses)}')
+    print(f'[TRIAL {trial.number}] ✅ Training completed!')
+    print(f'[TRIAL {trial.number}] Best performance at epoch {best_epoch} with HR@10: {best_hit_rate:.4f}')
+    
+    # Save the best checkpoint at the end of training
+    model_filename = f'{recommender_name}_{data_name}_TRIAL{trial.number}_FINAL_hr{best_hit_rate:.4f}_epoch{best_epoch}_lr{lr:.6f}_bs{batch_size}'
+    if recommender_name == 'MLP':
+        model_filename += f'_hd{hidden_dim}_beta{beta:.2f}.pt'
+    else:  # VAE
+        model_filename += f'_drop{VAE_config["dropout"]}.pt'
+    print(f'[TRIAL {trial.number}] 💾 Saving final best checkpoint: {model_filename}')
+    torch.save(model.state_dict(), Path(Neucheckpoints_path, model_filename))
+    
+    logger.info(f'[TRIAL {trial.number}] Stop at trial with batch size = {batch_size} and lr = {lr}. Best results at epoch {best_epoch} with HR@10: {best_hit_rate}')
     train_losses_dict[trial.number] = train_losses
     test_losses_dict[trial.number] = test_losses
     HR10_dict[trial.number] = hr10
@@ -301,12 +465,13 @@ optuna.logging.disable_default_handler()  # Stop showing logs in sys.stderr.
 
 study = optuna.create_study(direction='maximize')
 
+print(f'[INFO] Starting hyperparameter optimization for {recommender_name} on {data_name} dataset...')
 logger.info("Start optimization.")
 
 if recommender_name == 'MLP':
-    study.optimize(MLP_objective, n_trials=10) 
+    study.optimize(MLP_objective, n_trials=5) 
 elif recommender_name == 'VAE':
-    study.optimize(VAE_objective, n_trials=10) 
+    study.optimize(VAE_objective, n_trials=5) 
 
 with open(f"{recommender_name}_{data_name}_Optuna.log") as f:
     assert f.readline().startswith("A new study created")
@@ -314,8 +479,10 @@ with open(f"{recommender_name}_{data_name}_Optuna.log") as f:
     
     
 # Print best hyperparameters and corresponding metric value
-print("Best hyperparameters: {}".format(study.best_params))
-print("Best metric value: {}".format(study.best_value))
+print(f'[RESULTS] ========== Optimization Results ==========')
+print(f'[RESULTS] Best hyperparameters: {study.best_params}')
+print(f'[RESULTS] Best metric value: {study.best_value:.4f}')
+print(f'[RESULTS] Number of trials completed: {len(study.trials)}')
 
 
 from help_functions import *
@@ -346,6 +513,7 @@ hidden_dim_dict = {
 hidden_dim = hidden_dim_dict[(data_name,recommender_name)]
 recommender_path = recommender_path_dict[(data_name,recommender_name)]
 
+print(f'[INFO] Loading pre-trained model from: {recommender_path}')
 
 def load_recommender():
     if recommender_name=='MLP':
@@ -357,11 +525,12 @@ def load_recommender():
     recommender.eval()
     for param in recommender.parameters():
         param.requires_grad= False
+    print(f'[INFO] Model loaded successfully and set to evaluation mode')
     return recommender
     
 model = load_recommender()
 
-
+print(f'[INFO] Generating recommendations for test users...')
 
 topk_test = {}
 for i in range(len(test_array)):
@@ -369,7 +538,14 @@ for i in range(len(test_array)):
     tens = torch.Tensor(vec).to(device)
     topk_test[i] = int(get_user_recommended_item(tens, model, **kw_dict).cpu().detach().numpy())
 
+print(f'[INFO] Evaluating final model performance...')
 
 hit_rate_at_10, hit_rate_at_50, hit_rate_at_100, MRR, MPR = recommender_evaluations(model, **kw_dict)
 
-print(hit_rate_at_10, hit_rate_at_50, hit_rate_at_100, MRR, MPR)
+print(f'[FINAL RESULTS] ========== Final Model Performance ==========')
+print(f'[FINAL RESULTS] Hit@10:  {hit_rate_at_10:.4f} ({hit_rate_at_10*100:.2f}%)')
+print(f'[FINAL RESULTS] Hit@50:  {hit_rate_at_50:.4f} ({hit_rate_at_50*100:.2f}%)')
+print(f'[FINAL RESULTS] Hit@100: {hit_rate_at_100:.4f} ({hit_rate_at_100*100:.2f}%)')
+print(f'[FINAL RESULTS] MRR:     {MRR:.4f}')
+print(f'[FINAL RESULTS] MPR:     {MPR:.4f}')
+print(f'[FINAL RESULTS] ==============================================')
