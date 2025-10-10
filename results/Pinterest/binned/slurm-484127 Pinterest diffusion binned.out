@@ -1,0 +1,37 @@
+Starting embedding diffusion evaluation for pinterest dataset...
+Evaluation method: binned
+Test data path: datasets/lxr-CE/Pinterest/test_data_Pinterest.csv
+VAE checkpoint path: checkpoints/recommenders/VAE/VAE_Pinterest_8_12_128newbest.pt
+Diffusion model path: checkpoints/diffusionModels/diffusion_transformer_pinterest_best_sep11_loss12.pth
+User history dimension: 9362
+Timesteps: 30
+Guidance lambda: 3.0
+Loaded 3831 test users
+Starting evaluation on 3831 test users...
+Processing user 0/3831
+
+=== Embedding Diffusion Evaluation Results ===
+Number of users evaluated: 3831
+Dataset: PINTEREST, Recommender: VAE
+Evaluation method: binned
+
+Average Metrics:
+DEL: 0.0066
+INS: 0.0181
+NDCG: 0.2536
+POS@1: 0.1580
+POS@3: 0.2451
+POS@5: 0.2983
+POS@10: 0.3709
+POS@20: 0.4511
+POS@50: 0.5580
+POS@100: 0.6371
+NEG@1: 0.4900
+NEG@3: 0.6580
+NEG@5: 0.7193
+NEG@10: 0.7850
+NEG@20: 0.8332
+NEG@50: 0.8741
+NEG@100: 0.8930
+
+Results saved to: checkpoints/embeddings/user_embeddings_pinterest.npyl

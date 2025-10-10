@@ -5,87 +5,99 @@ from pathlib import Path
 import sys
 import os
 import pickle
+import argparse
 
 # Add LXR directory to path for imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'LXR')))
 from recommenders_architecture import VAE
 from diffusion_model import DiffusionMLP, TransformerDiffusionModel
 
-# === CONFIGURATION ===
-# Paths to data and model checkpoints
-TEST_DATA_PATH = Path('datasets/lxr-CE/ML1M/test_data_ML1M.csv')
-VAE_CHECKPOINT_PATH = Path('checkpoints/recommenders/VAE_ML1M_0_19_128.pt')
-DIFFUSION_MODEL_PATH = Path('checkpoints/diffusionModels/diffusion_transformer_best_aug5th_loss_120.pth')
-EMBEDDING_DIM = 64  # Latent dimension of VAE
-USER_HISTORY_DIM = 3381  # Number of items in ML1M
+# === DATASET CONFIGURATIONS ===
+DATASET_CONFIGS = {
+    'ml1m': {
+        'test_data_path': 'datasets/lxr-CE/ML1M/test_data_ML1M.csv',
+        'vae_checkpoint_path': 'checkpoints/recommenders/VAE/VAE_ML1M_4_28_128newbest.pt',
+        'diffusion_model_path': 'checkpoints/diffusionModels/diffusion_transformer_ml1m_best_aug13th_loss21.pth',
+        'results_file': 'checkpoints/embeddings/user_embeddings_ml1m.npy',
+        'user_history_dim': 3381,
+        'timesteps': 120,
+        'guidance_lambda': 3.0,
+        'model_type': 'transformer',
+        'model_config': {
+            'embedding_dim': 256,
+            'hidden_dim': 256,
+            'num_layers': 6,
+            'num_heads': 8,
+            'dropout': 0.1
+        }
+    },
+    'pinterest': {
+        'test_data_path': 'datasets/lxr-CE/Pinterest/test_data_Pinterest.csv',
+        'vae_checkpoint_path': 'checkpoints/recommenders/VAE/VAE_Pinterest_8_12_128newbest.pt',
+        'diffusion_model_path': 'checkpoints/diffusionModels/diffusion_transformer_pinterest_best_aug14_loss052.pth',
+        'results_file': 'checkpoints/embeddings/user_embeddings_pinterest.npyl',
+        'user_history_dim': 9362,
+        'timesteps': 30,
+        'guidance_lambda': 2.0,
+        'model_type': 'transformer',
+        'model_config': {
+            'embedding_dim': 256,
+            'hidden_dim': 256,
+            'num_layers': 6,
+            'num_heads': 8,
+            'dropout': 0.1
+        }
+    }
+}
+
+# === GLOBAL CONFIGURATION ===
 DEVICE = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-TIMESTEPS = 50  # Number of diffusion steps
-GUIDANCE_LAMBDA = 6.0  # Strength of guidance during sampling
+EMBEDDING_DIM = 256  # Latent dimension of VAE
 NUM_BINS = 10  # Number of bins for evaluation (10% increments)
 
 # VAE config (should match training)
 VAE_config = {
-    "enc_dims": [256, 64],
+    "enc_dims": [256, 256],
     "dropout": 0.5,
     "anneal_cap": 0.2,
     "total_anneal_steps": 200000
 }
 
-# === Load test data ===
-def load_test_users():
+def create_diffusion_model(model_type, model_config):
+    """
+    Create diffusion model based on type and configuration.
+    Args:
+        model_type: 'transformer' or 'mlp'
+        model_config: Model-specific configuration
+    Returns:
+        Diffusion model
+    """
+    if model_type == 'transformer':
+        return TransformerDiffusionModel(**model_config).to(DEVICE)
+    elif model_type == 'mlp':
+        return DiffusionMLP(model_config['embedding_dim']).to(DEVICE)
+    else:
+        raise ValueError(f"Unknown model type: {model_type}")
+
+def load_test_users(test_data_path, user_history_dim):
     """
     Load test user profiles from CSV. Ensures only item columns are used.
+    Args:
+        test_data_path: Path to test data CSV file
+        user_history_dim: Number of items in the dataset
     Returns:
         - user_profiles: np.ndarray of shape (num_users, USER_HISTORY_DIM)
         - user_indices: user IDs or DataFrame indices
     """
-    df = pd.read_csv(TEST_DATA_PATH, index_col=0)
+    df = pd.read_csv(test_data_path, index_col=0)
     if isinstance(df, pd.DataFrame):
         if 'user_id' in df.columns:
             df = df.drop(columns=['user_id'])
-        df = df.iloc[:, :USER_HISTORY_DIM]
+        df = df.iloc[:, :user_history_dim]
         return df.values.astype(np.float32), df.index.values
     else:
         raise ValueError("Test data could not be loaded as a DataFrame.")
 
-# === Load models ===
-# Load trained VAE recommender
-vae = VAE(VAE_config, device=DEVICE, num_items=USER_HISTORY_DIM).to(DEVICE)
-vae.load_state_dict(torch.load(VAE_CHECKPOINT_PATH, map_location=DEVICE))
-vae.eval()
-for param in vae.parameters():
-    param.requires_grad = False
-
-# Load trained diffusion model
-# This model learns to denoise user embeddings
-# and is used to generate counterfactual embeddings
-# via guided sampling
-
-# The diffusion model is a simple MLP
-# that takes a noisy embedding and timestep as input
-# and predicts the noise
-
-# diffusion = DiffusionMLP(EMBEDDING_DIM).to(DEVICE)
-diffusion = TransformerDiffusionModel(
-    embedding_dim=EMBEDDING_DIM,
-    hidden_dim=256,
-    num_layers=6,
-    num_heads=8,
-    dropout=0.1
-).to(DEVICE)
-diffusion.load_state_dict(torch.load(DIFFUSION_MODEL_PATH, map_location=DEVICE))
-diffusion.eval()
-
-# === Diffusion Schedule ===
-# These are the standard DDPM schedules for noise addition/removal
-betas = torch.linspace(1e-4, 0.02, TIMESTEPS, device=DEVICE)
-alphas = 1.0 - betas
-alphas_cumprod = torch.cumprod(alphas, dim=0)
-sqrt_recip_alphas = torch.sqrt(1.0 / alphas)
-sqrt_alphas_cumprod = torch.sqrt(alphas_cumprod)
-sqrt_one_minus_alphas_cumprod = torch.sqrt(1.0 - alphas_cumprod)
-
-# === Helper functions ===
 def get_embedding(user_tensor, vae):
     """
     Pass a user profile through the VAE encoder to get the mean embedding.
@@ -182,218 +194,7 @@ def recommender_run(user_tensor, recommender, item_tensor, item_id):
         scores = recommender(user_tensor.unsqueeze(0)).squeeze(0)
         return scores[item_id]
 
-def sample_counterfactual(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
-    """
-    Generate a counterfactual embedding using the diffusion model with guidance.
-    Args:
-        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
-        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
-        vae: VAE model
-        diffusion: DiffusionMLP model
-        guidance_lambda: float
-    Returns:
-        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
-    """
-    x = orig_embedding.clone().detach().unsqueeze(0)
-    for t in reversed(range(TIMESTEPS)):
-        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
-        with torch.no_grad():
-            noise_pred = diffusion(x, t_tensor)
-        alpha_t = alphas[t]
-        alpha_cumprod_t = alphas_cumprod[t]
-        if t > 0:
-            noise = torch.randn_like(x)
-        else:
-            noise = torch.zeros_like(x)
-        coef1 = 1.0 / torch.sqrt(alpha_t)
-        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
-        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
-        # Guidance: encourage removal of important items
-        x.requires_grad_(True)
-        cf_preferences = decode_embedding(x.squeeze(0), vae)
-        user_items = torch.where(orig_profile == 1)[0]
-
-        # # Mask out user items for recommendation
-        # cf_preferences_masked = cf_preferences.clone()
-        # cf_preferences_masked[user_items] = float('-inf')
-        # top1_idx = torch.argmax(cf_preferences_masked)
-
-        # # Loss to reduce the score of the top-1 recommended item
-        # top1_loss = guidance_lambda * cf_preferences[top1_idx]
-
-        # # (Optional) Existing loss for user items
-        # if len(user_items) > 0:
-        #     item_scores = cf_preferences[user_items]
-        #     top_user_item_idx = torch.argmax(item_scores)
-        #     user_item_loss = guidance_lambda * item_scores[top_user_item_idx]
-        #     # Combine losses (e.g., sum or weighted sum)
-        #     loss = user_item_loss + top1_loss
-        # else:
-        #     loss = top1_loss
-
-        # grad = torch.autograd.grad(loss, x)[0]
-        # x = x - 0.1 * grad
-        cf_preferences = decode_embedding(x.squeeze(0), vae)
-        user_items = torch.where(orig_profile == 1)[0]
-        if len(user_items) > 0:
-            item_scores = cf_preferences[user_items]
-            # Encourage removal of the item with highest score
-            top_item_idx = torch.argmax(item_scores)
-            loss = guidance_lambda * item_scores[top_item_idx]
-            grad = torch.autograd.grad(loss, x)[0]
-            x = x - 0.1 * grad
-        x = x.detach()
-        # print(f"Top-1 score before: {cf_preferences[top1_idx].item()}")
-    return x.squeeze(0)
-
-def sample_counterfactual_top1(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
-    """
-    Generate a counterfactual embedding by always penalizing the original top-1 user item.
-    Args:
-        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
-        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
-        vae: VAE model
-        diffusion: DiffusionMLP model
-        guidance_lambda: float
-    Returns:
-        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
-    """
-    # Identify the original top-1 user item
-    cf_preferences = decode_embedding(orig_embedding, vae)
-    user_items = torch.where(orig_profile == 1)[0]
-    if len(user_items) > 0:
-        item_scores = cf_preferences[user_items]
-        top_item_idx = torch.argmax(item_scores)
-        target_item = user_items[top_item_idx]
-    else:
-        target_item = None
-
-    x = orig_embedding.clone().detach().unsqueeze(0)
-    for t in reversed(range(TIMESTEPS)):
-        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
-        with torch.no_grad():
-            noise_pred = diffusion(x, t_tensor)
-        alpha_t = alphas[t]
-        alpha_cumprod_t = alphas_cumprod[t]
-        if t > 0:
-            noise = torch.randn_like(x)
-        else:
-            noise = torch.zeros_like(x)
-        coef1 = 1.0 / torch.sqrt(alpha_t)
-        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
-        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
-        x.requires_grad_(True)
-        if target_item is not None:
-            cf_preferences = decode_embedding(x.squeeze(0), vae)
-            loss = guidance_lambda * cf_preferences[target_item]
-            grad = torch.autograd.grad(loss, x)[0]
-            x = x - 0.1 * grad
-        x = x.detach()
-    return x.squeeze(0)
-
-def sample_counterfactual_topX(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA, top_percent=0.1):
-    """
-    Generate a counterfactual embedding by always penalizing the original top X% user items.
-    Args:
-        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
-        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
-        vae: VAE model
-        diffusion: DiffusionMLP model
-        guidance_lambda: float
-        top_percent: float (e.g., 0.1 for top 10%)
-    Returns:
-        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
-    """
-    # Identify the original top X% user items
-    cf_preferences = decode_embedding(orig_embedding, vae)
-    user_items = torch.where(orig_profile == 1)[0]
-    if len(user_items) > 0:
-        item_scores = cf_preferences[user_items]
-        num_top = max(1, int(len(user_items) * top_percent))
-        sorted_indices = torch.argsort(item_scores, descending=True)
-        target_items = user_items[sorted_indices[:num_top]]
-    else:
-        target_items = []
-
-    x = orig_embedding.clone().detach().unsqueeze(0)
-    for t in reversed(range(TIMESTEPS)):
-        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
-        with torch.no_grad():
-            noise_pred = diffusion(x, t_tensor)
-        alpha_t = alphas[t]
-        alpha_cumprod_t = alphas_cumprod[t]
-        if t > 0:
-            noise = torch.randn_like(x)
-        else:
-            noise = torch.zeros_like(x)
-        coef1 = 1.0 / torch.sqrt(alpha_t)
-        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
-        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
-        x.requires_grad_(True)
-        if len(target_items) > 0:
-            cf_preferences = decode_embedding(x.squeeze(0), vae)
-            loss = guidance_lambda * cf_preferences[target_items].sum()
-            grad = torch.autograd.grad(loss, x)[0]
-            x = x - 0.1 * grad
-        x = x.detach()
-    return x.squeeze(0)
-
-def sample_counterfactual_top1_target(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
-    """
-    Generate a counterfactual embedding by targeting the top-1 recommendation.
-    This approach is more meaningful as it shows what changes would alter the 
-    primary recommendation given to the user.
-    
-    Args:
-        orig_embedding: torch.Tensor (EMBEDDING_DIM,)
-        orig_profile: torch.Tensor (USER_HISTORY_DIM,)
-        vae: VAE model
-        diffusion: DiffusionMLP model
-        guidance_lambda: float
-    Returns:
-        torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
-    """
-    x = orig_embedding.clone().detach().unsqueeze(0)
-    
-    for t in reversed(range(TIMESTEPS)):
-        t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
-        
-        with torch.no_grad():
-            noise_pred = diffusion(x, t_tensor)
-        
-        alpha_t = alphas[t]
-        alpha_cumprod_t = alphas_cumprod[t]
-        
-        if t > 0:
-            noise = torch.randn_like(x)
-        else:
-            noise = torch.zeros_like(x)
-        
-        coef1 = 1.0 / torch.sqrt(alpha_t)
-        coef2 = (1.0 - alpha_t) / torch.sqrt(1.0 - alpha_cumprod_t)
-        x = coef1 * (x - coef2 * noise_pred) + torch.sqrt(betas[t]) * noise
-        
-        # Enhanced guidance: Target the top-1 recommendation
-        x.requires_grad_(True)
-        cf_preferences = decode_embedding(x.squeeze(0), vae)
-        user_items = torch.where(orig_profile == 1)[0]
-        
-        # Mask out user items to find top-1 recommendation
-        cf_preferences_masked = cf_preferences.clone()
-        cf_preferences_masked[user_items] = float('-inf')
-        top1_idx = torch.argmax(cf_preferences_masked)
-        
-        # Loss to reduce the score of the top-1 recommended item
-        top1_loss = guidance_lambda * cf_preferences[top1_idx]
-        
-        # Apply gradient to move embedding away from this recommendation
-        grad = torch.autograd.grad(top1_loss, x)[0]
-        x = x - 0.1 * grad
-        x = x.detach()
-        
-    return x.squeeze(0)
-
-def sample_counterfactual_integrated_guidance(orig_embedding, orig_profile, vae, diffusion, guidance_lambda=GUIDANCE_LAMBDA):
+def sample_counterfactual_integrated_guidance(orig_embedding, orig_profile, vae, diffusion, guidance_lambda, timesteps):
     """
     Generate counterfactual embedding with guidance integrated into the diffusion process.
     This approach modifies the noise prediction to incorporate guidance directly.
@@ -402,14 +203,15 @@ def sample_counterfactual_integrated_guidance(orig_embedding, orig_profile, vae,
         orig_embedding: torch.Tensor (EMBEDDING_DIM,)
         orig_profile: torch.Tensor (USER_HISTORY_DIM,)
         vae: VAE model
-        diffusion: DiffusionMLP model
+        diffusion: Diffusion model
         guidance_lambda: float
+        timesteps: int
     Returns:
         torch.Tensor: counterfactual embedding (EMBEDDING_DIM,)
     """
     x = orig_embedding.clone().detach().unsqueeze(0)
     
-    for t in reversed(range(TIMESTEPS)):
+    for t in reversed(range(timesteps)):
         t_tensor = torch.full((1,), t, dtype=torch.long, device=DEVICE)
         
         # Get base noise prediction
@@ -454,7 +256,7 @@ def sample_counterfactual_integrated_guidance(orig_embedding, orig_profile, vae,
         
     return x.squeeze(0)
 
-def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, cf_embedding, vae, recommender):
+def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, cf_embedding, vae, recommender, user_history_dim):
     """
     For a single user, rank their items by importance (from decoded cf_embedding),
     then remove items in 10% increments and compute metrics at each step.
@@ -465,6 +267,7 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
         cf_embedding: torch.Tensor (counterfactual embedding)
         vae: VAE model
         recommender: VAE model (for scoring)
+        user_history_dim: int (number of items in dataset)
     Returns:
         list of np.ndarray: metrics for each bin
     """
@@ -473,7 +276,7 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
     
     # Get items the user has and their importance scores
     user_items = torch.where(user_tensor == 1)[0]
-    user_hist_size = len(user_items) # why not user_vector? because they are the same
+    user_hist_size = len(user_items)
     
     if user_hist_size == 0:
         # User has no items, return default metrics
@@ -530,7 +333,7 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
         if item_id in list(POS_ranked_list.keys()):
             POS_index = list(POS_ranked_list.keys()).index(item_id) + 1
         else:
-            POS_index = USER_HISTORY_DIM
+            POS_index = user_history_dim
         
         NEG_index = get_index_in_the_list(masked_profile_neg, item_id, recommender) + 1
         
@@ -548,39 +351,9 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
         NEG_at_20[i] = 1 if NEG_index <= 20 else 0
         NEG_at_50[i] = 1 if NEG_index <= 50 else 0
         NEG_at_100[i] = 1 if NEG_index <= 100 else 0
-
-        # if i > 0:
-        #     # For POS metrics: if previous value was 0, current should also be 0
-        #     if POS_at_1[i-1] == 0:
-        #         POS_at_1[i] = 0
-        #     if POS_at_5[i-1] == 0:
-        #         POS_at_5[i] = 0
-        #     if POS_at_10[i-1] == 0:
-        #         POS_at_10[i] = 0
-        #     if POS_at_20[i-1] == 0:
-        #         POS_at_20[i] = 0
-        #     if POS_at_50[i-1] == 0:
-        #         POS_at_50[i] = 0
-        #     if POS_at_100[i-1] == 0:
-        #         POS_at_100[i] = 0
-            
-        #     # For NEG metrics: if previous value was 0, current should also be 0
-        #     if NEG_at_1[i-1] == 0:
-        #         NEG_at_1[i] = 0
-        #     if NEG_at_5[i-1] == 0:
-        #         NEG_at_5[i] = 0
-        #     if NEG_at_10[i-1] == 0:
-        #         NEG_at_10[i] = 0
-        #     if NEG_at_20[i-1] == 0:
-        #         NEG_at_20[i] = 0
-        #     if NEG_at_50[i-1] == 0:
-        #         NEG_at_50[i] = 0
-        #     if NEG_at_100[i-1] == 0:
-        #         NEG_at_100[i] = 0
-
         
         # Calculate DEL and INS
-        item_tensor = torch.zeros(USER_HISTORY_DIM, device=DEVICE)
+        item_tensor = torch.zeros(user_history_dim, device=DEVICE)
         item_tensor[item_id] = 1.0
         DEL[i] = float(recommender_run(masked_profile_pos, recommender, item_tensor, item_id).detach().cpu().numpy())
         INS[i] = float(recommender_run(user_tensor - masked_profile_pos, recommender, item_tensor, item_id).detach().cpu().numpy())
@@ -594,15 +367,51 @@ def single_user_metrics_embedding_diffusion(user_vector, user_tensor, item_id, c
     
     return res
 
-# === Main Evaluation ===
-def main():
+def evaluate_embedding_diffusion(dataset_name, num_users=None):
     """
-    Main evaluation loop. For each user, generate a counterfactual embedding,
-    rank their items by importance, and compute metrics as items are removed in bins.
-    Aggregates and prints/saves average metrics across all users.
+    Main evaluation loop for a specific dataset.
+    Args:
+        dataset_name: Name of the dataset ('ml1m' or 'pinterest')
+        num_users: Number of users to evaluate (None for all users)
     """
-    test_users, user_indices = load_test_users()
-    test_users = test_users[:] # number of users to evaluate
+    if dataset_name not in DATASET_CONFIGS:
+        raise ValueError(f"Dataset '{dataset_name}' not supported. Available datasets: {list(DATASET_CONFIGS.keys())}")
+    
+    config = DATASET_CONFIGS[dataset_name]
+    
+    print(f"Starting embedding diffusion evaluation for {dataset_name} dataset...")
+    print(f"Test data path: {config['test_data_path']}")
+    print(f"VAE checkpoint path: {config['vae_checkpoint_path']}")
+    print(f"Diffusion model path: {config['diffusion_model_path']}")
+    print(f"User history dimension: {config['user_history_dim']}")
+    print(f"Timesteps: {config['timesteps']}")
+    print(f"Guidance lambda: {config['guidance_lambda']}")
+    
+    # === Load test data ===
+    test_users, user_indices = load_test_users(config['test_data_path'], config['user_history_dim'])
+    if num_users is not None:
+        test_users = test_users[:num_users]
+    
+    print(f"Loaded {len(test_users)} test users")
+    
+    # === Load models ===
+    # Load trained VAE recommender
+    vae = VAE(VAE_config, device=DEVICE, num_items=config['user_history_dim']).to(DEVICE)
+    vae.load_state_dict(torch.load(config['vae_checkpoint_path'], map_location=DEVICE))
+    vae.eval()
+    for param in vae.parameters():
+        param.requires_grad = False
+    
+    # Load trained diffusion model
+    diffusion = create_diffusion_model(config['model_type'], config['model_config'])
+    diffusion.load_state_dict(torch.load(config['diffusion_model_path'], map_location=DEVICE))
+    diffusion.eval()
+    
+    # === Diffusion Schedule ===
+    global alphas, alphas_cumprod, betas
+    betas = torch.linspace(1e-4, 0.02, config['timesteps'], device=DEVICE)
+    alphas = 1.0 - betas
+    alphas_cumprod = torch.cumprod(alphas, dim=0)
     
     # Initialize metric arrays
     users_DEL = np.zeros(NUM_BINS + 1)
@@ -638,8 +447,8 @@ def main():
         orig_top1 = item_id
         
         # Generate counterfactual embedding
-        # cf_emb = sample_counterfactual(orig_emb, user_tensor, vae, diffusion)
-        cf_emb = sample_counterfactual_integrated_guidance(orig_emb, user_tensor, vae, diffusion)
+        cf_emb = sample_counterfactual_integrated_guidance(orig_emb, user_tensor, vae, diffusion, 
+                                                         config['guidance_lambda'], config['timesteps'])
         
         # Decode counterfactual embedding to get importance scores
         cf_preferences = decode_embedding(cf_emb, vae)
@@ -667,8 +476,9 @@ def main():
             print(f"User {idx}: orig_top1={orig_top1}, new_top1={new_top1}, items_removed={items_removed}, user_hist_len={user_hist_size}")
         else:
             print(f"successful the user history is {user_hist_size}")
+        
         # Calculate metrics for this user
-        res = single_user_metrics_embedding_diffusion(user_vec, user_tensor, item_id, cf_emb, vae, vae)
+        res = single_user_metrics_embedding_diffusion(user_vec, user_tensor, item_id, cf_emb, vae, vae, config['user_history_dim'])
         
         # Accumulate metrics
         users_DEL += res[0]
@@ -691,7 +501,7 @@ def main():
     num_users = len(test_users)
     print(f"\n=== Embedding Diffusion Evaluation Results ===")
     print(f"Number of users evaluated: {num_users}")
-    print(f"Dataset: ML1M, Recommender: VAE")
+    print(f"Dataset: {dataset_name.upper()}, Recommender: VAE")
     print(f"\nAverage Metrics:")
     print(f"DEL: {np.mean(users_DEL)/num_users:.4f}")
     print(f"INS: {np.mean(users_INS)/num_users:.4f}")
@@ -728,9 +538,19 @@ def main():
         'NEG_at_100': NEG_at_100 / num_users
     }
     
-    with open('embedding_diffusion_eval_results.pkl', 'wb') as f:
+    with open(config['results_file'], 'wb') as f:
         pickle.dump(results, f)
-    print(f"\nResults saved to: embedding_diffusion_eval_results.pkl")
+    print(f"\nResults saved to: {config['results_file']}")
 
 if __name__ == "__main__":
-    main() 
+    parser = argparse.ArgumentParser(description='Evaluate embedding diffusion for different datasets')
+    parser.add_argument('--dataset', type=str, default='ml1m', 
+                       choices=['ml1m', 'pinterest'],
+                       help='Dataset to evaluate (default: ml1m)')
+    parser.add_argument('--num_users', type=int, default=None,
+                       help='Number of users to evaluate (default: all users)')
+    
+    args = parser.parse_args()
+    
+    # Evaluate embedding diffusion for the specified dataset
+    evaluate_embedding_diffusion(args.dataset, args.num_users) 

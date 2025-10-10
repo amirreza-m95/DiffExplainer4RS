@@ -3,10 +3,13 @@ datasets/
 *.log
 diffCEvenv/
 checkpoints/
-results/
+# results/
 wandb/
 zSlurmOutput/
 zTrash/
+User history size analysis/
+Visualization/
+studies/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
