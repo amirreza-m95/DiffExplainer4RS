@@ -1,0 +1,30 @@
+=== user_activity_raw data Statistics ===
+
+ratings_per_user:
+  count: 10444365.0
+  mean: 1.264446139138186
+  std: 0.548766901477625
+  min: 1.0
+  25%: 1.0
+  50%: 1.0
+  75%: 1.0
+  max: 9.0
+
+unique_users:
+  10444365
+
+total_ratings:
+  13206337
+
+avg_ratings_per_user:
+  1.264446139138186
+
+activity_percentiles:
+  p10: 1.0
+  p25: 1.0
+  p50: 1.0
+  p75: 1.0
+  p90: 2.0
+  p95: 2.0
+  p99: 3.0
+

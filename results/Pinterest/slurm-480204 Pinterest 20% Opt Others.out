@@ -1,0 +1,386 @@
+0
+500
+1000
+1500
+2000
+2500
+3000
+3500
+ ============ Start explaining Pinterest VAE by lxr ============
+Evaluation method: onebyoneuntil20p
+From file: VAE_lxr_expl_dict.pkl
+User 0, total time: 0.24
+User 500, total time: 0.14
+User 1000, total time: 0.14
+User 1500, total time: 0.24
+User 2000, total time: 0.18
+User 2500, total time: 0.14
+User 3000, total time: 0.24
+User 3500, total time: 0.24
+this experiment is for /home/amir.reza/counterfactual/DiffExplainer4RS/checkpoints/recommenders/VAE/VAE_Pinterest_0_11_128.pt and VAE
+
+ONEBYONEUNTIL20P Evaluation Results:
+Maximum removal steps across all users: 15
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0186, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0176, INS: 0.0030, NDCG: 0.8836
+  POS@1: 0.7395, POS@3: 0.9483, POS@5: 0.9823, POS@10: 0.9977
+  NEG@1: 0.7734, NEG@3: 0.9622, NEG@5: 0.9909, NEG@10: 0.9992
+Step 2 (remove 2 items):
+  DEL: 0.0166, INS: 0.0054, NDCG: 0.8175
+  POS@1: 0.6205, POS@3: 0.8786, POS@5: 0.9444, POS@10: 0.9856
+  NEG@1: 0.7009, NEG@3: 0.9246, NEG@5: 0.9718, NEG@10: 0.9945
+Step 3 (remove 3 items):
+  DEL: 0.0158, INS: 0.0072, NDCG: 0.7669
+  POS@1: 0.5471, POS@3: 0.8107, POS@5: 0.8924, POS@10: 0.9629
+  NEG@1: 0.6399, NEG@3: 0.8780, NEG@5: 0.9418, NEG@10: 0.9835
+Step 4 (remove 4 items):
+  DEL: 0.0148, INS: 0.0085, NDCG: 0.7231
+  POS@1: 0.4818, POS@3: 0.7521, POS@5: 0.8415, POS@10: 0.9346
+  NEG@1: 0.6138, NEG@3: 0.8582, NEG@5: 0.9271, NEG@10: 0.9757
+Step 5 (remove 5 items):
+  DEL: 0.0141, INS: 0.0094, NDCG: 0.7136
+  POS@1: 0.4694, POS@3: 0.7356, POS@5: 0.8398, POS@10: 0.9264
+  NEG@1: 0.6066, NEG@3: 0.8539, NEG@5: 0.9287, NEG@10: 0.9729
+Step 6 (remove 6 items):
+  DEL: 0.0130, INS: 0.0099, NDCG: 0.6919
+  POS@1: 0.4379, POS@3: 0.7030, POS@5: 0.8083, POS@10: 0.9183
+  NEG@1: 0.6154, NEG@3: 0.8533, NEG@5: 0.9243, NEG@10: 0.9787
+Step 7 (remove 7 items):
+  DEL: 0.0122, INS: 0.0102, NDCG: 0.6857
+  POS@1: 0.4282, POS@3: 0.7105, POS@5: 0.8038, POS@10: 0.8995
+  NEG@1: 0.6483, NEG@3: 0.8708, NEG@5: 0.9282, NEG@10: 0.9737
+Step 8 (remove 8 items):
+  DEL: 0.0123, INS: 0.0108, NDCG: 0.6755
+  POS@1: 0.4213, POS@3: 0.6904, POS@5: 0.7716, POS@10: 0.8883
+  NEG@1: 0.6904, NEG@3: 0.8985, NEG@5: 0.9391, NEG@10: 0.9797
+Step 9 (remove 9 items):
+  DEL: 0.0121, INS: 0.0106, NDCG: 0.6861
+  POS@1: 0.4245, POS@3: 0.6887, POS@5: 0.8019, POS@10: 0.9057
+  NEG@1: 0.6415, NEG@3: 0.8774, NEG@5: 0.9245, NEG@10: 0.9906
+Step 10 (remove 10 items):
+  DEL: 0.0134, INS: 0.0133, NDCG: 0.7911
+  POS@1: 0.5814, POS@3: 0.8605, POS@5: 0.8837, POS@10: 0.9767
+  NEG@1: 0.7442, NEG@3: 0.9302, NEG@5: 0.9767, NEG@10: 0.9767
+
+Note: For onebyoneuntil20p method, metrics are computed per removal step rather than as overall averages.
+ ============ Start explaining Pinterest VAE by lime ============
+Evaluation method: onebyoneuntil20p
+From file: VAE_lime_expl_dict.pkl
+User 0, total time: 0.18
+User 500, total time: 0.13
+User 1000, total time: 0.12
+User 1500, total time: 0.21
+User 2000, total time: 0.15
+User 2500, total time: 0.13
+User 3000, total time: 0.22
+User 3500, total time: 0.22
+this experiment is for /home/amir.reza/counterfactual/DiffExplainer4RS/checkpoints/recommenders/VAE/VAE_Pinterest_0_11_128.pt and VAE
+
+ONEBYONEUNTIL20P Evaluation Results:
+Maximum removal steps across all users: 15
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0186, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0173, INS: 0.0033, NDCG: 0.8603
+  POS@1: 0.6886, POS@3: 0.9337, POS@5: 0.9794, POS@10: 0.9961
+  NEG@1: 0.8058, NEG@3: 0.9721, NEG@5: 0.9935, NEG@10: 0.9990
+Step 2 (remove 2 items):
+  DEL: 0.0162, INS: 0.0059, NDCG: 0.7887
+  POS@1: 0.5638, POS@3: 0.8541, POS@5: 0.9303, POS@10: 0.9807
+  NEG@1: 0.7541, NEG@3: 0.9457, NEG@5: 0.9804, NEG@10: 0.9963
+Step 3 (remove 3 items):
+  DEL: 0.0153, INS: 0.0081, NDCG: 0.7209
+  POS@1: 0.4662, POS@3: 0.7579, POS@5: 0.8613, POS@10: 0.9491
+  NEG@1: 0.7166, NEG@3: 0.9219, NEG@5: 0.9650, NEG@10: 0.9914
+Step 4 (remove 4 items):
+  DEL: 0.0140, INS: 0.0099, NDCG: 0.6716
+  POS@1: 0.4016, POS@3: 0.6823, POS@5: 0.8061, POS@10: 0.9103
+  NEG@1: 0.6997, NEG@3: 0.9116, NEG@5: 0.9574, NEG@10: 0.9886
+Step 5 (remove 5 items):
+  DEL: 0.0131, INS: 0.0114, NDCG: 0.6426
+  POS@1: 0.3628, POS@3: 0.6443, POS@5: 0.7691, POS@10: 0.8840
+  NEG@1: 0.7362, NEG@3: 0.9388, NEG@5: 0.9723, NEG@10: 0.9929
+Step 6 (remove 6 items):
+  DEL: 0.0117, INS: 0.0129, NDCG: 0.6080
+  POS@1: 0.3101, POS@3: 0.6107, POS@5: 0.7314, POS@10: 0.8426
+  NEG@1: 0.7657, NEG@3: 0.9574, NEG@5: 0.9834, NEG@10: 0.9976
+Step 7 (remove 7 items):
+  DEL: 0.0106, INS: 0.0145, NDCG: 0.5825
+  POS@1: 0.2775, POS@3: 0.5622, POS@5: 0.7057, POS@10: 0.8469
+  NEG@1: 0.7943, NEG@3: 0.9761, NEG@5: 0.9952, NEG@10: 1.0000
+Step 8 (remove 8 items):
+  DEL: 0.0102, INS: 0.0161, NDCG: 0.5539
+  POS@1: 0.2538, POS@3: 0.4975, POS@5: 0.6447, POS@10: 0.8223
+  NEG@1: 0.8325, NEG@3: 0.9797, NEG@5: 1.0000, NEG@10: 1.0000
+Step 9 (remove 9 items):
+  DEL: 0.0100, INS: 0.0176, NDCG: 0.5326
+  POS@1: 0.2170, POS@3: 0.4717, POS@5: 0.6415, POS@10: 0.8491
+  NEG@1: 0.8396, NEG@3: 0.9811, NEG@5: 1.0000, NEG@10: 1.0000
+Step 10 (remove 10 items):
+  DEL: 0.0105, INS: 0.0219, NDCG: 0.5592
+  POS@1: 0.2558, POS@3: 0.5116, POS@5: 0.6977, POS@10: 0.9070
+  NEG@1: 0.8140, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+
+Note: For onebyoneuntil20p method, metrics are computed per removal step rather than as overall averages.
+ ============ Start explaining Pinterest VAE by jaccard ============
+Evaluation method: onebyoneuntil20p
+From file: VAE_jaccard_expl_dict.pkl
+User 0, total time: 0.19
+User 500, total time: 0.13
+User 1000, total time: 0.12
+User 1500, total time: 0.22
+User 2000, total time: 0.16
+User 2500, total time: 0.13
+User 3000, total time: 0.22
+User 3500, total time: 0.22
+this experiment is for /home/amir.reza/counterfactual/DiffExplainer4RS/checkpoints/recommenders/VAE/VAE_Pinterest_0_11_128.pt and VAE
+
+ONEBYONEUNTIL20P Evaluation Results:
+Maximum removal steps across all users: 15
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0186, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0166, INS: 0.0048, NDCG: 0.8424
+  POS@1: 0.6562, POS@3: 0.9157, POS@5: 0.9682, POS@10: 0.9943
+  NEG@1: 0.7912, NEG@3: 0.9682, NEG@5: 0.9903, NEG@10: 0.9987
+Step 2 (remove 2 items):
+  DEL: 0.0151, INS: 0.0086, NDCG: 0.7481
+  POS@1: 0.5038, POS@3: 0.8050, POS@5: 0.8940, POS@10: 0.9622
+  NEG@1: 0.7473, NEG@3: 0.9439, NEG@5: 0.9815, NEG@10: 0.9958
+Step 3 (remove 3 items):
+  DEL: 0.0137, INS: 0.0115, NDCG: 0.6682
+  POS@1: 0.3933, POS@3: 0.6837, POS@5: 0.8002, POS@10: 0.9159
+  NEG@1: 0.7065, NEG@3: 0.9193, NEG@5: 0.9645, NEG@10: 0.9882
+Step 4 (remove 4 items):
+  DEL: 0.0124, INS: 0.0134, NDCG: 0.6066
+  POS@1: 0.3151, POS@3: 0.5965, POS@5: 0.7237, POS@10: 0.8525
+  NEG@1: 0.6763, NEG@3: 0.9037, NEG@5: 0.9526, NEG@10: 0.9855
+Step 5 (remove 5 items):
+  DEL: 0.0117, INS: 0.0146, NDCG: 0.5870
+  POS@1: 0.2933, POS@3: 0.5671, POS@5: 0.6849, POS@10: 0.8304
+  NEG@1: 0.6849, NEG@3: 0.9158, NEG@5: 0.9576, NEG@10: 0.9865
+Step 6 (remove 6 items):
+  DEL: 0.0105, INS: 0.0155, NDCG: 0.5689
+  POS@1: 0.2817, POS@3: 0.5243, POS@5: 0.6544, POS@10: 0.8024
+  NEG@1: 0.7065, NEG@3: 0.9325, NEG@5: 0.9704, NEG@10: 0.9929
+Step 7 (remove 7 items):
+  DEL: 0.0098, INS: 0.0161, NDCG: 0.5499
+  POS@1: 0.2392, POS@3: 0.5167, POS@5: 0.6364, POS@10: 0.8086
+  NEG@1: 0.7416, NEG@3: 0.9378, NEG@5: 0.9713, NEG@10: 0.9952
+Step 8 (remove 8 items):
+  DEL: 0.0097, INS: 0.0161, NDCG: 0.5448
+  POS@1: 0.2335, POS@3: 0.4924, POS@5: 0.6091, POS@10: 0.8274
+  NEG@1: 0.7462, NEG@3: 0.9289, NEG@5: 0.9695, NEG@10: 0.9949
+Step 9 (remove 9 items):
+  DEL: 0.0095, INS: 0.0182, NDCG: 0.5112
+  POS@1: 0.1887, POS@3: 0.4717, POS@5: 0.6226, POS@10: 0.7925
+  NEG@1: 0.7264, NEG@3: 0.9151, NEG@5: 0.9717, NEG@10: 1.0000
+Step 10 (remove 10 items):
+  DEL: 0.0104, INS: 0.0230, NDCG: 0.5567
+  POS@1: 0.2326, POS@3: 0.6047, POS@5: 0.6512, POS@10: 0.8372
+  NEG@1: 0.7209, NEG@3: 0.9302, NEG@5: 1.0000, NEG@10: 1.0000
+
+Note: For onebyoneuntil20p method, metrics are computed per removal step rather than as overall averages.
+ ============ Start explaining Pinterest VAE by cosine ============
+Evaluation method: onebyoneuntil20p
+From file: VAE_cosine_expl_dict.pkl
+User 0, total time: 0.19
+User 500, total time: 0.13
+User 1000, total time: 0.13
+User 1500, total time: 0.22
+User 2000, total time: 0.16
+User 2500, total time: 0.13
+User 3000, total time: 0.22
+User 3500, total time: 0.22
+this experiment is for /home/amir.reza/counterfactual/DiffExplainer4RS/checkpoints/recommenders/VAE/VAE_Pinterest_0_11_128.pt and VAE
+
+ONEBYONEUNTIL20P Evaluation Results:
+Maximum removal steps across all users: 15
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0186, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0167, INS: 0.0048, NDCG: 0.8451
+  POS@1: 0.6630, POS@3: 0.9146, POS@5: 0.9671, POS@10: 0.9945
+  NEG@1: 0.7912, NEG@3: 0.9687, NEG@5: 0.9903, NEG@10: 0.9987
+Step 2 (remove 2 items):
+  DEL: 0.0150, INS: 0.0087, NDCG: 0.7453
+  POS@1: 0.4978, POS@3: 0.8027, POS@5: 0.8935, POS@10: 0.9629
+  NEG@1: 0.7465, NEG@3: 0.9434, NEG@5: 0.9809, NEG@10: 0.9956
+Step 3 (remove 3 items):
+  DEL: 0.0136, INS: 0.0116, NDCG: 0.6668
+  POS@1: 0.3915, POS@3: 0.6837, POS@5: 0.8007, POS@10: 0.9143
+  NEG@1: 0.7078, NEG@3: 0.9206, NEG@5: 0.9653, NEG@10: 0.9888
+Step 4 (remove 4 items):
+  DEL: 0.0123, INS: 0.0136, NDCG: 0.6048
+  POS@1: 0.3135, POS@3: 0.5955, POS@5: 0.7196, POS@10: 0.8503
+  NEG@1: 0.6767, NEG@3: 0.9040, NEG@5: 0.9517, NEG@10: 0.9848
+Step 5 (remove 5 items):
+  DEL: 0.0116, INS: 0.0147, NDCG: 0.5878
+  POS@1: 0.2986, POS@3: 0.5607, POS@5: 0.6832, POS@10: 0.8280
+  NEG@1: 0.6861, NEG@3: 0.9181, NEG@5: 0.9582, NEG@10: 0.9876
+Step 6 (remove 6 items):
+  DEL: 0.0105, INS: 0.0157, NDCG: 0.5635
+  POS@1: 0.2757, POS@3: 0.5136, POS@5: 0.6473, POS@10: 0.7976
+  NEG@1: 0.7124, NEG@3: 0.9325, NEG@5: 0.9728, NEG@10: 0.9929
+Step 7 (remove 7 items):
+  DEL: 0.0098, INS: 0.0164, NDCG: 0.5421
+  POS@1: 0.2321, POS@3: 0.4952, POS@5: 0.6388, POS@10: 0.8086
+  NEG@1: 0.7368, NEG@3: 0.9450, NEG@5: 0.9761, NEG@10: 0.9952
+Step 8 (remove 8 items):
+  DEL: 0.0097, INS: 0.0161, NDCG: 0.5513
+  POS@1: 0.2437, POS@3: 0.5330, POS@5: 0.6345, POS@10: 0.8122
+  NEG@1: 0.7513, NEG@3: 0.9239, NEG@5: 0.9645, NEG@10: 0.9949
+Step 9 (remove 9 items):
+  DEL: 0.0094, INS: 0.0178, NDCG: 0.4943
+  POS@1: 0.1792, POS@3: 0.4340, POS@5: 0.5943, POS@10: 0.7925
+  NEG@1: 0.7075, NEG@3: 0.9057, NEG@5: 0.9717, NEG@10: 1.0000
+Step 10 (remove 10 items):
+  DEL: 0.0105, INS: 0.0222, NDCG: 0.5398
+  POS@1: 0.2326, POS@3: 0.5349, POS@5: 0.6047, POS@10: 0.8372
+  NEG@1: 0.7442, NEG@3: 0.9302, NEG@5: 1.0000, NEG@10: 1.0000
+
+Note: For onebyoneuntil20p method, metrics are computed per removal step rather than as overall averages.
+ ============ Start explaining Pinterest VAE by shap ============
+Evaluation method: onebyoneuntil20p
+From file: VAE_shap_expl_dict.pkl
+User 0, total time: 0.19
+User 500, total time: 0.12
+User 1000, total time: 0.13
+User 1500, total time: 0.21
+User 2000, total time: 0.16
+User 2500, total time: 0.12
+User 3000, total time: 0.21
+User 3500, total time: 0.22
+this experiment is for /home/amir.reza/counterfactual/DiffExplainer4RS/checkpoints/recommenders/VAE/VAE_Pinterest_0_11_128.pt and VAE
+
+ONEBYONEUNTIL20P Evaluation Results:
+Maximum removal steps across all users: 15
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0186, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0180, INS: 0.0019, NDCG: 0.8962
+  POS@1: 0.7622, POS@3: 0.9619, POS@5: 0.9869, POS@10: 0.9987
+  NEG@1: 0.7583, NEG@3: 0.9533, NEG@5: 0.9830, NEG@10: 0.9979
+Step 2 (remove 2 items):
+  DEL: 0.0174, INS: 0.0034, NDCG: 0.8420
+  POS@1: 0.6601, POS@3: 0.9126, POS@5: 0.9601, POS@10: 0.9896
+  NEG@1: 0.6620, NEG@3: 0.9039, NEG@5: 0.9572, NEG@10: 0.9890
+Step 3 (remove 3 items):
+  DEL: 0.0168, INS: 0.0047, NDCG: 0.7992
+  POS@1: 0.5941, POS@3: 0.8514, POS@5: 0.9230, POS@10: 0.9728
+  NEG@1: 0.5892, NEG@3: 0.8467, NEG@5: 0.9219, NEG@10: 0.9705
+Step 4 (remove 4 items):
+  DEL: 0.0160, INS: 0.0055, NDCG: 0.7690
+  POS@1: 0.5472, POS@3: 0.8143, POS@5: 0.9012, POS@10: 0.9608
+  NEG@1: 0.5507, NEG@3: 0.8121, NEG@5: 0.8996, NEG@10: 0.9586
+Step 5 (remove 5 items):
+  DEL: 0.0155, INS: 0.0059, NDCG: 0.7684
+  POS@1: 0.5448, POS@3: 0.8180, POS@5: 0.8999, POS@10: 0.9647
+  NEG@1: 0.5424, NEG@3: 0.8127, NEG@5: 0.9028, NEG@10: 0.9676
+Step 6 (remove 6 items):
+  DEL: 0.0146, INS: 0.0061, NDCG: 0.7682
+  POS@1: 0.5515, POS@3: 0.8083, POS@5: 0.8947, POS@10: 0.9574
+  NEG@1: 0.5396, NEG@3: 0.8012, NEG@5: 0.9006, NEG@10: 0.9669
+Step 7 (remove 7 items):
+  DEL: 0.0139, INS: 0.0062, NDCG: 0.7772
+  POS@1: 0.5574, POS@3: 0.8278, POS@5: 0.9115, POS@10: 0.9522
+  NEG@1: 0.5455, NEG@3: 0.8254, NEG@5: 0.9091, NEG@10: 0.9713
+Step 8 (remove 8 items):
+  DEL: 0.0144, INS: 0.0055, NDCG: 0.8091
+  POS@1: 0.6193, POS@3: 0.8376, POS@5: 0.9289, POS@10: 0.9746
+  NEG@1: 0.6244, NEG@3: 0.8274, NEG@5: 0.9086, NEG@10: 0.9848
+Step 9 (remove 9 items):
+  DEL: 0.0140, INS: 0.0065, NDCG: 0.7875
+  POS@1: 0.5755, POS@3: 0.8302, POS@5: 0.8962, POS@10: 0.9623
+  NEG@1: 0.5755, NEG@3: 0.8208, NEG@5: 0.8868, NEG@10: 0.9717
+Step 10 (remove 10 items):
+  DEL: 0.0155, INS: 0.0073, NDCG: 0.8729
+  POS@1: 0.7442, POS@3: 0.8837, POS@5: 0.9767, POS@10: 1.0000
+  NEG@1: 0.7674, NEG@3: 0.8837, NEG@5: 0.9535, NEG@10: 1.0000
+
+Note: For onebyoneuntil20p method, metrics are computed per removal step rather than as overall averages.
+ ============ Start explaining Pinterest VAE by accent ============
+Evaluation method: onebyoneuntil20p
+From file: VAE_accent_expl_dict.pkl
+User 0, total time: 0.19
+User 500, total time: 0.13
+User 1000, total time: 0.13
+User 1500, total time: 0.22
+User 2000, total time: 0.16
+User 2500, total time: 0.13
+User 3000, total time: 0.22
+User 3500, total time: 0.22
+this experiment is for /home/amir.reza/counterfactual/DiffExplainer4RS/checkpoints/recommenders/VAE/VAE_Pinterest_0_11_128.pt and VAE
+
+ONEBYONEUNTIL20P Evaluation Results:
+Maximum removal steps across all users: 15
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0186, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0171, INS: 0.0029, NDCG: 0.9352
+  POS@1: 0.8546, POS@3: 0.9689, POS@5: 0.9875, POS@10: 0.9979
+  NEG@1: 0.5748, NEG@3: 0.9042, NEG@5: 0.9773, NEG@10: 0.9966
+Step 2 (remove 2 items):
+  DEL: 0.0158, INS: 0.0053, NDCG: 0.8789
+  POS@1: 0.7585, POS@3: 0.9086, POS@5: 0.9470, POS@10: 0.9786
+  NEG@1: 0.4161, NEG@3: 0.8063, NEG@5: 0.9342, NEG@10: 0.9862
+Step 3 (remove 3 items):
+  DEL: 0.0147, INS: 0.0073, NDCG: 0.8177
+  POS@1: 0.6602, POS@3: 0.8415, POS@5: 0.8924, POS@10: 0.9480
+  NEG@1: 0.3218, NEG@3: 0.7159, NEG@5: 0.8699, NEG@10: 0.9629
+Step 4 (remove 4 items):
+  DEL: 0.0136, INS: 0.0084, NDCG: 0.7699
+  POS@1: 0.5895, POS@3: 0.7787, POS@5: 0.8434, POS@10: 0.9170
+  NEG@1: 0.2747, NEG@3: 0.6542, NEG@5: 0.8241, NEG@10: 0.9457
+Step 5 (remove 5 items):
+  DEL: 0.0130, INS: 0.0089, NDCG: 0.7654
+  POS@1: 0.5872, POS@3: 0.7674, POS@5: 0.8292, POS@10: 0.9128
+  NEG@1: 0.2473, NEG@3: 0.6160, NEG@5: 0.8068, NEG@10: 0.9340
+Step 6 (remove 6 items):
+  DEL: 0.0122, INS: 0.0090, NDCG: 0.7612
+  POS@1: 0.5799, POS@3: 0.7574, POS@5: 0.8355, POS@10: 0.9148
+  NEG@1: 0.2142, NEG@3: 0.5621, NEG@5: 0.7799, NEG@10: 0.9408
+Step 7 (remove 7 items):
+  DEL: 0.0116, INS: 0.0088, NDCG: 0.7532
+  POS@1: 0.5789, POS@3: 0.7368, POS@5: 0.8182, POS@10: 0.9019
+  NEG@1: 0.1914, NEG@3: 0.5335, NEG@5: 0.7584, NEG@10: 0.9115
+Step 8 (remove 8 items):
+  DEL: 0.0115, INS: 0.0084, NDCG: 0.7263
+  POS@1: 0.5431, POS@3: 0.7005, POS@5: 0.7716, POS@10: 0.8731
+  NEG@1: 0.1827, NEG@3: 0.5381, NEG@5: 0.7310, NEG@10: 0.8934
+Step 9 (remove 9 items):
+  DEL: 0.0113, INS: 0.0089, NDCG: 0.7196
+  POS@1: 0.5377, POS@3: 0.6792, POS@5: 0.7642, POS@10: 0.8774
+  NEG@1: 0.2170, NEG@3: 0.5283, NEG@5: 0.7264, NEG@10: 0.8868
+Step 10 (remove 10 items):
+  DEL: 0.0126, INS: 0.0097, NDCG: 0.7750
+  POS@1: 0.5814, POS@3: 0.7907, POS@5: 0.8605, POS@10: 0.9302
+  NEG@1: 0.2791, NEG@3: 0.6279, NEG@5: 0.7674, NEG@10: 0.9767
+
+Note: For onebyoneuntil20p method, metrics are computed per removal step rather than as overall averages.

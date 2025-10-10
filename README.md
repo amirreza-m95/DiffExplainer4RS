@@ -1,192 +1,77 @@
-# DiffExplainer4RS
-# Transformer-Based Diffusion Models
-
-This directory contains enhanced diffusion models for user embeddings that use transformer architectures instead of simple MLPs. These models are designed to be more powerful and expressive than the original MLP-based diffusion model.
-
-## Models Overview
-
-### 1. TransformerDiffusionModel
-A transformer-based diffusion model that uses self-attention mechanisms to better model relationships between different dimensions of the embedding and the diffusion process.
-
-**Key Features:**
-- Self-attention layers for better feature interaction
-- Sinusoidal positional embeddings for timesteps
-- Multiple transformer layers with residual connections
-- Configurable architecture (number of layers, heads, hidden dimensions)
-
-**Advantages over MLP:**
-- Better modeling of complex relationships in embedding space
-- More expressive capacity
-- Better gradient flow through residual connections
-- Attention mechanisms help focus on relevant features
-
-### 2. CrossAttentionTransformerDiffusion
-An advanced transformer diffusion model with cross-attention between the embedding and time information.
-
-**Key Features:**
-- Cross-attention between embedding and time embeddings
-- Self-attention on the embedding features
-- Separate attention mechanisms for different types of relationships
-- More sophisticated architecture for complex diffusion processes
-
-**Advantages:**
-- Explicit modeling of time-embedding relationships
-- Better temporal understanding
-- More sophisticated attention patterns
-- Higher capacity for complex diffusion processes
+# DiceRec
+### Denoising Diffusion-based Guided Counterfactual Explanation for Recommender Systems
 
 ## Usage
 
-### Basic Usage
 
-```python
-from transformer_diffusion_model import TransformerDiffusionModel, CrossAttentionTransformerDiffusion
+## Folders
 
-# Create a transformer diffusion model
-model = TransformerDiffusionModel(
-    embedding_dim=64,
-    hidden_dim=256,
-    num_layers=6,
-    num_heads=8,
-    dropout=0.1
-)
+* **benchmarks**: contains the code and results of computational efficiency analysis.
+* **src**: contains several code files:
+  - ContinousDiff - Main implementation files for DiceRec.
+  - LXR - Implementation of the baselines.
+  - Diffusion - implementation of the discrete optimization of the diffusion model.
+* **results** 
+- contains 3 folders each for the full results and visualizations of the 3 datasets.
 
-# Create a cross-attention model
-cross_model = CrossAttentionTransformerDiffusion(
-    embedding_dim=64,
-    hidden_dim=256,
-    num_layers=6,
-    num_heads=8,
-    dropout=0.1
-)
+## Reproducibility and Commands
 
-# Forward pass
-x = torch.randn(batch_size, embedding_dim)  # User embeddings
-t = torch.randint(0, 1000, (batch_size,))  # Diffusion timesteps
-noise_pred = model(x, t)  # Predicted noise
-```
+Below are the commands to set up the environment and reproduce the main results. Paths assume running from the repository root (`/home/amir.reza/counterfactual/DiffExplainer4RS`).
 
-### Using the Factory Function
-
-```python
-from transformer_diffusion_model import create_diffusion_model
-
-# Create different model types
-mlp_model = create_diffusion_model("mlp", embedding_dim=64, hidden_dim=128)
-transformer_model = create_diffusion_model("transformer", embedding_dim=64, hidden_dim=256, num_layers=4)
-cross_model = create_diffusion_model("cross_attention", embedding_dim=64, hidden_dim=256, num_layers=4)
-```
-
-## Model Comparison
-
-| Model Type | Parameters | Complexity | Performance | Use Case |
-|------------|------------|------------|-------------|----------|
-| MLP | ~10K-50K | Low | Fast | Simple embeddings |
-| Transformer | ~100K-1M | Medium | Medium | Complex embeddings |
-| Cross-Attention | ~200K-2M | High | Slower | Very complex embeddings |
-
-## Architecture Details
-
-### SinusoidalPositionEmbedding
-- Provides temporal context to the model
-- Uses sinusoidal functions for smooth interpolation
-- Helps model understand diffusion timestep progression
-
-### TransformerBlock
-- Standard transformer block with self-attention
-- Layer normalization and residual connections
-- Feed-forward network with GELU activation
-
-### Time Embedding Network
-- Processes diffusion timesteps into learned representations
-- Multi-layer network with SiLU activation
-- Projects time information to the same dimension as embeddings
-
-## Training Considerations
-
-### Hyperparameters
-- **hidden_dim**: 256-512 for good performance
-- **num_layers**: 4-8 layers typically sufficient
-- **num_heads**: 8-16 heads work well
-- **dropout**: 0.1-0.2 for regularization
-
-### Memory Usage
-- Transformer models use more memory than MLPs
-- Consider gradient checkpointing for large models
-- Use mixed precision training for efficiency
-
-### Training Tips
-1. Start with smaller models and scale up
-2. Use learning rate scheduling
-3. Monitor attention weights for interpretability
-4. Consider using gradient clipping for stability
-
-## Integration with Existing Code
-
-The new models are designed to be drop-in replacements for the original `DiffusionMLP`. They maintain the same interface:
-
-```python
-# Original MLP model
-from diffusion_model import DiffusionMLP
-model = DiffusionMLP(embedding_dim=64, hidden_dim=128)
-
-# New transformer model (same interface)
-from transformer_diffusion_model import TransformerDiffusionModel
-model = TransformerDiffusionModel(embedding_dim=64, hidden_dim=256)
-```
-
-## Example Scripts
-
-Run the example script to compare different models:
+### Environment setup
 
 ```bash
-python example_transformer_diffusion.py
+# Create and activate a virtual environment (Python 3.10+ recommended)
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements_clean.txt
 ```
 
-This will show:
-- Parameter counts for each model
-- Performance comparisons
-- Memory usage patterns
-- Output statistics
+### Training the diffusion model (embeddings)
 
-## Performance Benchmarks
+Train a diffusion model on precomputed user embeddings for a dataset.
 
-The transformer models typically show:
-- 2-5x more parameters than MLP
-- 1.5-3x slower inference time
-- Better quality for complex embedding spaces
-- More stable training for large datasets
+```bash
+# dataset_name ∈ {ml1m, pinterest, yahoo} (default: ml1m)
+python src/ContinousDiff/train_diffusion.py --dataset <dataset_name>
+```
 
-## Future Improvements
+Defaults (per dataset) for input embeddings and checkpoint paths are defined inside the script.
 
-Potential enhancements:
-1. **Conditional generation**: Add user-specific conditions
-2. **Hierarchical attention**: Multi-scale attention mechanisms
-3. **Efficient attention**: Use linear attention for large embeddings
-4. **Adversarial training**: Combine with GAN-like architectures
-5. **Multi-modal**: Handle different types of user data
+### Counterfactual generation with diffusion
 
-## Troubleshooting
+Generate counterfactual user embeddings and basic statistics for a subset of users.
 
-### Common Issues
+```bash
+# dataset_name ∈ {ml1m, pinterest, yahoo}; num_users default: 10
+python src/ContinousDiff/sample_counterfactual.py --dataset <dataset_name> --num_users 50
+```
 
-1. **Out of Memory**: Reduce batch size or model size
-2. **Slow Training**: Use gradient checkpointing or smaller models
-3. **Poor Convergence**: Check learning rate and use warmup
-4. **Attention Weights**: Monitor for degenerate attention patterns
+Outputs are written as JSON (e.g., `counterfactual_results_<dataset_name>.json`).
 
-### Debugging Tips
+Prerequisites (paths defined inside the script for each dataset):
+- Precomputed embeddings in `checkpoints/embeddings/*.npy`
+- Trained diffusion checkpoints in `checkpoints/diffusionModels/*.pth`
+- Trained VAE checkpoint in `checkpoints/recommenders/VAE/*.pt`
 
-```python
-# Check model parameters
-total_params = sum(p.numel() for p in model.parameters())
-print(f"Total parameters: {total_params:,}")
+### Embedding-diffusion evaluation (metric curves over removal steps)
 
-# Check attention weights
-with torch.no_grad():
-    # Add hooks to monitor attention weights
-    pass
+Run the integrated-guidance evaluation that computes DEL/INS/NDCG and POS/NEG metrics over 10% removal steps.
 
-# Profile memory usage
-torch.cuda.empty_cache()
-``` 
+```bash
+# dataset_name ∈ {ml1m, pinterest, yahoo}; num_users optional
+python src/ContinousDiff/eval_embedding_diffusion.py --dataset <dataset_name> --num_users 100
+```
+
+Default result paths are configured per dataset inside the script (note Pinterest uses `.npyl` as written in code).
+
+Note: Ensure the dataset CSVs exist under `datasets/lxr-CE/<Dataset>/test_data_<Dataset>.csv` and model checkpoints exist under `checkpoints/...` as configured in the script.
+
+```
+
+### Notes
+- Replace paths/checkpoints with your actual files if names differ.
+- GPU is automatically used if available; otherwise CPU.
+- For large models, consider enabling mixed precision and gradient checkpointing where relevant. 

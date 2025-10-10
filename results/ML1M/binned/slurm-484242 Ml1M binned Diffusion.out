@@ -1,0 +1,37 @@
+Starting embedding diffusion evaluation for ml1m dataset...
+Evaluation method: binned
+Test data path: datasets/lxr-CE/ML1M/test_data_ML1M.csv
+VAE checkpoint path: checkpoints/recommenders/VAE/VAE_ML1M_4_28_128newbest.pt
+Diffusion model path: checkpoints/diffusionModels/diffusion_transformer_ml1m_best_aug13th_loss21.pth
+User history dimension: 3381
+Timesteps: 120
+Guidance lambda: 3.0
+Loaded 1208 test users
+Starting evaluation on 1208 test users...
+Processing user 0/1208
+
+=== Embedding Diffusion Evaluation Results ===
+Number of users evaluated: 1208
+Dataset: ML1M, Recommender: VAE
+Evaluation method: binned
+
+Average Metrics:
+DEL: 0.0076
+INS: 0.0208
+NDCG: 0.2773
+POS@1: 0.1650
+POS@3: 0.2610
+POS@5: 0.3233
+POS@10: 0.4212
+POS@20: 0.5234
+POS@50: 0.6510
+POS@100: 0.7407
+NEG@1: 0.4784
+NEG@3: 0.6455
+NEG@5: 0.7097
+NEG@10: 0.7807
+NEG@20: 0.8384
+NEG@50: 0.8940
+NEG@100: 0.9242
+
+Results saved to: checkpoints/embeddings/user_embeddings_ml1m.npy
