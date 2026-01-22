@@ -56,8 +56,24 @@ Prerequisites (paths defined inside the script for each dataset):
 - Trained diffusion checkpoints in `checkpoints/diffusionModels/*.pth`
 - Trained VAE checkpoint in `checkpoints/recommenders/VAE/*.pt`
 ### Results
+#### MovieLens-1M
+##### Fine-grained Evaluation
 ![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+##### Constrained & Fine-grained Evaluation
 ![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+
+#### Pinterest
+##### Fine-grained Evaluation
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Pinterest/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+##### Constrained & Fine-grained Evaluation
+![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Pinterest/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+
+#### Yahoo! Music
+##### Fine-grained Evaluation
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Yahoo/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+##### Constrained & Fine-grained Evaluation
+![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Yahoo/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+
 ### Embedding-diffusion evaluation (metric curves over removal steps)
 
 Run the integrated-guidance evaluation that computes DEL/INS/NDCG and POS/NEG metrics over 10% removal steps.
