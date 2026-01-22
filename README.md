@@ -55,7 +55,9 @@ Prerequisites (paths defined inside the script for each dataset):
 - Precomputed embeddings in `checkpoints/embeddings/*.npy`
 - Trained diffusion checkpoints in `checkpoints/diffusionModels/*.pth`
 - Trained VAE checkpoint in `checkpoints/recommenders/VAE/*.pt`
-
+### Results
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
 ### Embedding-diffusion evaluation (metric curves over removal steps)
 
 Run the integrated-guidance evaluation that computes DEL/INS/NDCG and POS/NEG metrics over 10% removal steps.
