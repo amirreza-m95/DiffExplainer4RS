@@ -1,0 +1,86 @@
+Starting embedding diffusion evaluation for ml1m dataset...
+Evaluation method: onebyone
+Test data path: datasets/lxr-CE/ML1M/test_data_ML1M.csv
+VAE checkpoint path: checkpoints/recommenders/VAE/VAE_ML1M_4_28_128newbest.pt
+Diffusion model path: checkpoints/diffusionModels/diffusion_transformer_ml1m_best_aug13th_loss21.pth
+User history dimension: 3381
+Timesteps: 120
+Guidance lambda: 3.0
+Loaded 1208 test users
+Starting evaluation on 1208 test users...
+Processing user 0/1208
+=== Embedding Diffusion Evaluation Results ===
+Number of users evaluated: 1208
+Dataset: ML1M, Recommender: VAE
+Evaluation method: onebyone
+
+One-by-One Evaluation Results:
+Maximum removal steps across all users: 817
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0155, INS: 0.0042, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0143, INS: 0.0170, NDCG: 0.8550
+  POS@1: 0.6515, POS@3: 0.9619, POS@5: 0.9934, POS@10: 1.0000
+  NEG@1: 0.8535, NEG@3: 0.9826, NEG@5: 0.9950, NEG@10: 1.0000
+Step 2 (remove 2 items):
+  DEL: 0.0134, INS: 0.0212, NDCG: 0.7810
+  POS@1: 0.5290, POS@3: 0.8882, POS@5: 0.9561, POS@10: 0.9901
+  NEG@1: 0.8162, NEG@3: 0.9694, NEG@5: 0.9834, NEG@10: 0.9967
+Step 3 (remove 3 items):
+  DEL: 0.0128, INS: 0.0233, NDCG: 0.7287
+  POS@1: 0.4548, POS@3: 0.8128, POS@5: 0.9279, POS@10: 0.9801
+  NEG@1: 0.7763, NEG@3: 0.9569, NEG@5: 0.9785, NEG@10: 0.9942
+Step 4 (remove 4 items):
+  DEL: 0.0121, INS: 0.0248, NDCG: 0.6738
+  POS@1: 0.3819, POS@3: 0.7432, POS@5: 0.8683, POS@10: 0.9553
+  NEG@1: 0.7399, NEG@3: 0.9337, NEG@5: 0.9743, NEG@10: 0.9934
+Step 5 (remove 5 items):
+  DEL: 0.0114, INS: 0.0261, NDCG: 0.6342
+  POS@1: 0.3447, POS@3: 0.6744, POS@5: 0.8260, POS@10: 0.9329
+  NEG@1: 0.7216, NEG@3: 0.9213, NEG@5: 0.9677, NEG@10: 0.9884
+Step 6 (remove 6 items):
+  DEL: 0.0109, INS: 0.0268, NDCG: 0.5972
+  POS@1: 0.3101, POS@3: 0.6385, POS@5: 0.7819, POS@10: 0.9013
+  NEG@1: 0.6973, NEG@3: 0.8997, NEG@5: 0.9536, NEG@10: 0.9809
+Step 7 (remove 7 items):
+  DEL: 0.0103, INS: 0.0273, NDCG: 0.5588
+  POS@1: 0.2741, POS@3: 0.5955, POS@5: 0.7384, POS@10: 0.8671
+  NEG@1: 0.6902, NEG@3: 0.8978, NEG@5: 0.9394, NEG@10: 0.9743
+Step 8 (remove 8 items):
+  DEL: 0.0099, INS: 0.0273, NDCG: 0.5324
+  POS@1: 0.2510, POS@3: 0.5436, POS@5: 0.7057, POS@10: 0.8446
+  NEG@1: 0.6658, NEG@3: 0.8745, NEG@5: 0.9135, NEG@10: 0.9643
+Step 9 (remove 9 items):
+  DEL: 0.0096, INS: 0.0272, NDCG: 0.5089
+  POS@1: 0.2385, POS@3: 0.5088, POS@5: 0.6552, POS@10: 0.8184
+  NEG@1: 0.6502, NEG@3: 0.8661, NEG@5: 0.9247, NEG@10: 0.9623
+Step 10 (remove 10 items):
+  DEL: 0.0091, INS: 0.0271, NDCG: 0.4817
+  POS@1: 0.2159, POS@3: 0.4696, POS@5: 0.6265, POS@10: 0.7926
+  NEG@1: 0.6341, NEG@3: 0.8634, NEG@5: 0.9073, NEG@10: 0.9511
+Step 15 (remove 15 items):
+  DEL: 0.0073, INS: 0.0258, NDCG: 0.3939
+  POS@1: 0.1716, POS@3: 0.3653, POS@5: 0.4942, POS@10: 0.6738
+  NEG@1: 0.5796, NEG@3: 0.7956, NEG@5: 0.8578, NEG@10: 0.9200
+Step 20 (remove 20 items):
+  DEL: 0.0061, INS: 0.0238, NDCG: 0.3305
+  POS@1: 0.1241, POS@3: 0.3138, POS@5: 0.4311, POS@10: 0.5855
+  NEG@1: 0.5670, NEG@3: 0.7752, NEG@5: 0.8338, NEG@10: 0.9003
+Step 25 (remove 25 items):
+  DEL: 0.0054, INS: 0.0219, NDCG: 0.3013
+  POS@1: 0.1203, POS@3: 0.2793, POS@5: 0.3813, POS@10: 0.5360
+  NEG@1: 0.5424, NEG@3: 0.7508, NEG@5: 0.8249, NEG@10: 0.8915
+Step 30 (remove 30 items):
+  DEL: 0.0048, INS: 0.0203, NDCG: 0.2549
+  POS@1: 0.0907, POS@3: 0.2388, POS@5: 0.3249, POS@10: 0.4627
+  NEG@1: 0.5189, NEG@3: 0.7302, NEG@5: 0.7910, NEG@10: 0.8726
+Step 50 (remove 50 items):
+  DEL: 0.0034, INS: 0.0162, NDCG: 0.1647
+  POS@1: 0.0593, POS@3: 0.1469, POS@5: 0.2092, POS@10: 0.3042
+  NEG@1: 0.4748, NEG@3: 0.6617, NEG@5: 0.7211, NEG@10: 0.8116
+
+Results saved to: checkpoints/embeddings/user_embeddings_ml1m_onebyone.npy

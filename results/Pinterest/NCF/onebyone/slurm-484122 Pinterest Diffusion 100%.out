@@ -1,0 +1,86 @@
+Starting embedding diffusion evaluation for pinterest dataset...
+Evaluation method: onebyone
+Test data path: datasets/lxr-CE/Pinterest/test_data_Pinterest.csv
+VAE checkpoint path: checkpoints/recommenders/VAE/VAE_Pinterest_8_12_128newbest.pt
+Diffusion model path: checkpoints/diffusionModels/diffusion_transformer_pinterest_best_sep11_loss12.pth
+User history dimension: 9362
+Timesteps: 30
+Guidance lambda: 3.0
+Loaded 3831 test users
+Starting evaluation on 3831 test users...
+Processing user 0/3831
+=== Embedding Diffusion Evaluation Results ===
+Number of users evaluated: 3831
+Dataset: PINTEREST, Recommender: VAE
+Evaluation method: onebyone
+
+One-by-One Evaluation Results:
+Maximum removal steps across all users: 71
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0180, INS: 0.0002, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0161, INS: 0.0046, NDCG: 0.8220
+  POS@1: 0.6032, POS@3: 0.9196, POS@5: 0.9718, POS@10: 0.9963
+  NEG@1: 0.8207, NEG@3: 0.9786, NEG@5: 0.9950, NEG@10: 0.9992
+Step 2 (remove 2 items):
+  DEL: 0.0146, INS: 0.0087, NDCG: 0.7073
+  POS@1: 0.4276, POS@3: 0.7849, POS@5: 0.8964, POS@10: 0.9682
+  NEG@1: 0.7679, NEG@3: 0.9517, NEG@5: 0.9804, NEG@10: 0.9963
+Step 3 (remove 3 items):
+  DEL: 0.0132, INS: 0.0121, NDCG: 0.6112
+  POS@1: 0.3213, POS@3: 0.6539, POS@5: 0.7925, POS@10: 0.9146
+  NEG@1: 0.7322, NEG@3: 0.9295, NEG@5: 0.9692, NEG@10: 0.9943
+Step 4 (remove 4 items):
+  DEL: 0.0121, INS: 0.0146, NDCG: 0.5339
+  POS@1: 0.2555, POS@3: 0.5495, POS@5: 0.6862, POS@10: 0.8457
+  NEG@1: 0.6969, NEG@3: 0.9120, NEG@5: 0.9561, NEG@10: 0.9854
+Step 5 (remove 5 items):
+  DEL: 0.0110, INS: 0.0167, NDCG: 0.4544
+  POS@1: 0.1892, POS@3: 0.4539, POS@5: 0.5938, POS@10: 0.7622
+  NEG@1: 0.6763, NEG@3: 0.8878, NEG@5: 0.9460, NEG@10: 0.9796
+Step 6 (remove 6 items):
+  DEL: 0.0101, INS: 0.0183, NDCG: 0.3880
+  POS@1: 0.1504, POS@3: 0.3761, POS@5: 0.5020, POS@10: 0.6766
+  NEG@1: 0.6500, NEG@3: 0.8671, NEG@5: 0.9280, NEG@10: 0.9710
+Step 7 (remove 7 items):
+  DEL: 0.0093, INS: 0.0195, NDCG: 0.3350
+  POS@1: 0.1237, POS@3: 0.3098, POS@5: 0.4330, POS@10: 0.5996
+  NEG@1: 0.6317, NEG@3: 0.8483, NEG@5: 0.9105, NEG@10: 0.9606
+Step 8 (remove 8 items):
+  DEL: 0.0085, INS: 0.0205, NDCG: 0.2878
+  POS@1: 0.1008, POS@3: 0.2595, POS@5: 0.3673, POS@10: 0.5278
+  NEG@1: 0.6197, NEG@3: 0.8329, NEG@5: 0.8951, NEG@10: 0.9470
+Step 9 (remove 9 items):
+  DEL: 0.0077, INS: 0.0213, NDCG: 0.2461
+  POS@1: 0.0843, POS@3: 0.2159, POS@5: 0.3096, POS@10: 0.4594
+  NEG@1: 0.5988, NEG@3: 0.8178, NEG@5: 0.8836, NEG@10: 0.9374
+Step 10 (remove 10 items):
+  DEL: 0.0070, INS: 0.0218, NDCG: 0.2101
+  POS@1: 0.0720, POS@3: 0.1749, POS@5: 0.2529, POS@10: 0.3989
+  NEG@1: 0.5732, NEG@3: 0.7914, NEG@5: 0.8624, NEG@10: 0.9290
+Step 15 (remove 15 items):
+  DEL: 0.0042, INS: 0.0226, NDCG: 0.0932
+  POS@1: 0.0285, POS@3: 0.0750, POS@5: 0.1100, POS@10: 0.1857
+  NEG@1: 0.4531, NEG@3: 0.6668, NEG@5: 0.7475, NEG@10: 0.8373
+Step 20 (remove 20 items):
+  DEL: 0.0024, INS: 0.0213, NDCG: 0.0436
+  POS@1: 0.0133, POS@3: 0.0332, POS@5: 0.0499, POS@10: 0.0890
+  NEG@1: 0.3120, NEG@3: 0.4762, NEG@5: 0.5519, NEG@10: 0.6397
+Step 25 (remove 25 items):
+  DEL: 0.0019, INS: 0.0207, NDCG: 0.0288
+  POS@1: 0.0094, POS@3: 0.0224, POS@5: 0.0353, POS@10: 0.0565
+  NEG@1: 0.2797, NEG@3: 0.4329, NEG@5: 0.5065, NEG@10: 0.5948
+Step 30 (remove 30 items):
+  DEL: 0.0018, INS: 0.0200, NDCG: 0.0280
+  POS@1: 0.0059, POS@3: 0.0201, POS@5: 0.0320, POS@10: 0.0604
+  NEG@1: 0.2722, NEG@3: 0.4189, NEG@5: 0.4935, NEG@10: 0.5811
+Step 50 (remove 50 items):
+  DEL: 0.0011, INS: 0.0179, NDCG: 0.0100
+  POS@1: 0.0000, POS@3: 0.0000, POS@5: 0.0233, POS@10: 0.0233
+  NEG@1: 0.0698, NEG@3: 0.2326, NEG@5: 0.3721, NEG@10: 0.4419
+
+Results saved to: checkpoints/embeddings/user_embeddings_pinterest_onebyone.npyl

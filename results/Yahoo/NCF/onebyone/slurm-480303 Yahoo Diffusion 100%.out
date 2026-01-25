@@ -1,0 +1,87 @@
+Starting embedding diffusion evaluation for yahoo dataset...
+Evaluation method: onebyone
+Test data path: datasets/lxr-CE/Yahoo/test_data_Yahoo.csv
+VAE checkpoint path: checkpoints/recommenders/VAE/VAE_Yahoo_0_32_256newbest.pt
+Diffusion model path: checkpoints/diffusionModels/diffusion_transformer_yahoo_best.pth
+User history dimension: 4604
+Timesteps: 100
+Guidance lambda: 2.5
+Loaded 2760 test users
+Starting evaluation on 2760 test users...
+Processing user 0/2760
+User 0: orig_top1=3399, new_top1=3399, items_removed=[3891], user_hist_len=10
+=== Embedding Diffusion Evaluation Results ===
+Number of users evaluated: 2760
+Dataset: YAHOO, Recommender: VAE
+Evaluation method: onebyone
+
+One-by-One Evaluation Results:
+Maximum removal steps across all users: 284
+
+Average Metrics at Key Steps:
+Step 0 (remove 0 items):
+  DEL: 0.0321, INS: 0.0058, NDCG: 1.0000
+  POS@1: 1.0000, POS@3: 1.0000, POS@5: 1.0000, POS@10: 1.0000
+  NEG@1: 1.0000, NEG@3: 1.0000, NEG@5: 1.0000, NEG@10: 1.0000
+Step 1 (remove 1 items):
+  DEL: 0.0273, INS: 0.0294, NDCG: 0.7616
+  POS@1: 0.5018, POS@3: 0.8732, POS@5: 0.9337, POS@10: 0.9714
+  NEG@1: 0.7504, NEG@3: 0.9377, NEG@5: 0.9667, NEG@10: 0.9851
+Step 2 (remove 2 items):
+  DEL: 0.0229, INS: 0.0365, NDCG: 0.6191
+  POS@1: 0.3319, POS@3: 0.7130, POS@5: 0.8214, POS@10: 0.8902
+  NEG@1: 0.6551, NEG@3: 0.8518, NEG@5: 0.9000, NEG@10: 0.9337
+Step 3 (remove 3 items):
+  DEL: 0.0206, INS: 0.0384, NDCG: 0.5526
+  POS@1: 0.2618, POS@3: 0.5924, POS@5: 0.7507, POS@10: 0.8557
+  NEG@1: 0.6235, NEG@3: 0.8401, NEG@5: 0.8950, NEG@10: 0.9350
+Step 4 (remove 4 items):
+  DEL: 0.0186, INS: 0.0389, NDCG: 0.4945
+  POS@1: 0.2121, POS@3: 0.4971, POS@5: 0.6739, POS@10: 0.8167
+  NEG@1: 0.5890, NEG@3: 0.8203, NEG@5: 0.8819, NEG@10: 0.9278
+Step 5 (remove 5 items):
+  DEL: 0.0170, INS: 0.0387, NDCG: 0.4470
+  POS@1: 0.1787, POS@3: 0.4264, POS@5: 0.5956, POS@10: 0.7700
+  NEG@1: 0.5758, NEG@3: 0.8088, NEG@5: 0.8613, NEG@10: 0.9225
+Step 6 (remove 6 items):
+  DEL: 0.0154, INS: 0.0381, NDCG: 0.4072
+  POS@1: 0.1509, POS@3: 0.3755, POS@5: 0.5346, POS@10: 0.7266
+  NEG@1: 0.5644, NEG@3: 0.7908, NEG@5: 0.8563, NEG@10: 0.9132
+Step 7 (remove 7 items):
+  DEL: 0.0141, INS: 0.0374, NDCG: 0.3734
+  POS@1: 0.1422, POS@3: 0.3253, POS@5: 0.4742, POS@10: 0.6766
+  NEG@1: 0.5500, NEG@3: 0.7762, NEG@5: 0.8445, NEG@10: 0.9028
+Step 8 (remove 8 items):
+  DEL: 0.0133, INS: 0.0364, NDCG: 0.3426
+  POS@1: 0.1234, POS@3: 0.2982, POS@5: 0.4321, POS@10: 0.6314
+  NEG@1: 0.5435, NEG@3: 0.7692, NEG@5: 0.8367, NEG@10: 0.9006
+Step 9 (remove 9 items):
+  DEL: 0.0124, INS: 0.0356, NDCG: 0.3140
+  POS@1: 0.1105, POS@3: 0.2701, POS@5: 0.3926, POS@10: 0.5860
+  NEG@1: 0.5344, NEG@3: 0.7581, NEG@5: 0.8253, NEG@10: 0.8931
+Step 10 (remove 10 items):
+  DEL: 0.0116, INS: 0.0347, NDCG: 0.2873
+  POS@1: 0.0986, POS@3: 0.2421, POS@5: 0.3456, POS@10: 0.5482
+  NEG@1: 0.5153, NEG@3: 0.7596, NEG@5: 0.8220, NEG@10: 0.8932
+Step 15 (remove 15 items):
+  DEL: 0.0091, INS: 0.0305, NDCG: 0.2053
+  POS@1: 0.0666, POS@3: 0.1706, POS@5: 0.2352, POS@10: 0.4024
+  NEG@1: 0.4847, NEG@3: 0.7036, NEG@5: 0.7641, NEG@10: 0.8559
+Step 20 (remove 20 items):
+  DEL: 0.0074, INS: 0.0269, NDCG: 0.1670
+  POS@1: 0.0544, POS@3: 0.1359, POS@5: 0.1988, POS@10: 0.3254
+  NEG@1: 0.4579, NEG@3: 0.6542, NEG@5: 0.7290, NEG@10: 0.8105
+Step 25 (remove 25 items):
+  DEL: 0.0061, INS: 0.0245, NDCG: 0.1301
+  POS@1: 0.0395, POS@3: 0.0955, POS@5: 0.1547, POS@10: 0.2596
+  NEG@1: 0.4507, NEG@3: 0.6272, NEG@5: 0.7165, NEG@10: 0.7954
+Step 30 (remove 30 items):
+  DEL: 0.0055, INS: 0.0224, NDCG: 0.1103
+  POS@1: 0.0304, POS@3: 0.0748, POS@5: 0.1305, POS@10: 0.2294
+  NEG@1: 0.4208, NEG@3: 0.6210, NEG@5: 0.6971, NEG@10: 0.7947
+Step 50 (remove 50 items):
+  DEL: 0.0038, INS: 0.0166, NDCG: 0.0750
+  POS@1: 0.0162, POS@3: 0.0486, POS@5: 0.0892, POS@10: 0.1622
+  NEG@1: 0.3757, NEG@3: 0.5297, NEG@5: 0.6162, NEG@10: 0.6919
+
+Results saved to: embedding_diffusion_eval_results_yahoo_onebyone.pkl
