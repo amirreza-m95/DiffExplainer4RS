@@ -1,6 +1,9 @@
 # DiceRec
 ### Denoising Diffusion-based Guided Counterfactual Explanation for Recommender Systems
 
+### Denoising Phase Illustration
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/Visualization/DiceRec%20Architecture%20with%20Auto%20Encoder-1.pdf)
+
 ## Usage
 
 
@@ -57,22 +60,59 @@ Prerequisites (paths defined inside the script for each dataset):
 - Trained VAE checkpoint in `checkpoints/recommenders/VAE/*.pt`
 ### Results
 #### MovieLens-1M
-##### Fine-grained Evaluation
+##### Fine-grained Evaluation (VAE) --> POS & NDCG-P
 ![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
-##### Constrained & Fine-grained Evaluation
+
+##### Fine-grained Evaluation (NCF) --> POS
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_POS_10_50.png)
+
+##### Fine-grained Evaluation (MF) --> POS
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_radar_step_10_POS.png)
+
+##### Constrained & Fine-grained Evaluation (VAE) --> POS & NDCG-P
 ![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
 
+##### Constrained & Fine-grained Evaluation (NCF) --> POS
+![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyoneuntil20p/comprehensive_metric_trends_POS_10_50.png)
+
+##### Constrained & Fine-grained Evaluation (MF) --> POS
+![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyoneuntil20p/comprehensive_radar_step_10_POS.png)
+
+
+
+
 #### Pinterest
-##### Fine-grained Evaluation
+##### Fine-grained Evaluation (VAE) --> POS & NDCG-P
 ![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Pinterest/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+
+##### Fine-grained Evaluation (NCF) --> POS
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Pinterest/onebyone/comprehensive_metric_trends_POS_10_50.png)
+
+##### Fine-grained Evaluation (MF) --> POS
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Pinterest/onebyone/comprehensive_radar_step_10_POS.png)
+
 ##### Constrained & Fine-grained Evaluation
 ![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Pinterest/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
 
+
+
+
 #### Yahoo! Music
-##### Fine-grained Evaluation
+##### Fine-grained Evaluation (VAE) --> POS & NDCG-P
 ![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Yahoo/onebyone/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+
+##### Fine-grained Evaluation (NCF) --> POS
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_POS_10_50.png)
+
+##### Fine-grained Evaluation (MF) --> POS
+![ML1M_fine-grained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_radar_step_10_POS.png) 
+
 ##### Constrained & Fine-grained Evaluation
 ![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Yahoo/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
+
+
+
+https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_POS_10_50.png
 
 ### Embedding-diffusion evaluation (metric curves over removal steps)
 
