@@ -1,0 +1,33 @@
+Starting embedding diffusion evaluation for yahoo dataset...
+Test data path: datasets/lxr-CE/Yahoo/test_data_Yahoo.csv
+VAE checkpoint path: checkpoints/recommenders/VAE/VAE_Yahoo_0_32_256newbest.pt
+Diffusion model path: checkpoints/diffusionModels/diffusion_transformer_yahoo_best.pth
+User history dimension: 4604
+Timesteps: 100
+Guidance lambda: 2.5
+Loaded 2760 test users
+Starting evaluation on 2760 test users...
+Processing user 0/2760
+
+=== Embedding Diffusion Evaluation Results ===
+Number of users evaluated: 2760
+Dataset: YAHOO, Recommender: VAE
+
+Average Metrics:
+DEL: 0.0143
+INS: 0.0339
+NDCG: 0.3028
+POS@1: 0.1712
+POS@5: 0.3598
+POS@10: 0.4682
+POS@20: 0.5885
+POS@50: 0.7201
+POS@100: 0.8174
+NEG@1: 0.4197
+NEG@5: 0.6533
+NEG@10: 0.7284
+NEG@20: 0.8007
+NEG@50: 0.8597
+NEG@100: 0.9046
+
+Results saved to: embedding_diffusion_eval_results_yahoo.pkl
