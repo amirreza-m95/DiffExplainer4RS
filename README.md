@@ -111,8 +111,9 @@ Prerequisites (paths defined inside the script for each dataset):
 ![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/Yahoo/onebyoneuntil20p/comprehensive_metric_trends_NDCGP_POS3_POS5_0_10.png)
 
 
+##### Counterfactual Explanation Compactness analysis over datasets
+![ML1M_Constrained](https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/User%20history%20size%20analysis/compactness_comparison_all_datasets_VAE.png)
 
-https://github.com/amirreza-m95/DiffExplainer4RS/blob/main/results/ML1M/onebyone/comprehensive_metric_trends_POS_10_50.png
 
 ### Embedding-diffusion evaluation (metric curves over removal steps)
 
